@@ -1,38 +1,75 @@
-const fs = require("fs");
+const fs = require("fs/promises");
+const path = require("path");
 const { chromium } = require("playwright");
-const STORAGE_STATE_PATH = "./sessions/storageStateIG.json";
 
+const STORAGE_STATE_PATH = "./sessions/storageStateIG.json";
 let cachedStorageState = null;
 
 async function loginAndCacheSession(browser) {
-  console.log("เปิด browser เพื่อ login Instagram...");
+  console.log("[INFO] Launching browser for Instagram login...");
   const context = await browser.newContext();
   const page = await context.newPage();
 
   await page.goto("https://www.instagram.com/accounts/login/");
-  console.log("กรุณาล็อกอินใน browser นี้...");
+  console.log("[ACTION] Please log in manually in the opened browser...");
 
-  // รอจนกว่าจะเข้าสู่หน้า Home (feed) เพื่อยืนยันว่าล็อกอินสำเร็จ
   await page.waitForURL("https://www.instagram.com/", { timeout: 0 });
-
   cachedStorageState = await context.storageState();
-  fs.writeFileSync(
+
+  await fs.mkdir(path.dirname(STORAGE_STATE_PATH), { recursive: true });
+  await fs.writeFile(
     STORAGE_STATE_PATH,
     JSON.stringify(cachedStorageState, null, 2)
   );
-  console.log("บันทึก session ลงไฟล์สำเร็จ");
+  console.log("[SUCCESS] Session saved to file.");
+
   await context.close();
+}
+
+async function loadCachedStorageState() {
+  if (!cachedStorageState) {
+    try {
+      const data = await fs.readFile(STORAGE_STATE_PATH, "utf-8");
+      cachedStorageState = JSON.parse(data);
+      console.log("[INFO] Loaded cached session.");
+    } catch {
+      console.warn("[WARN] No cached session found. Login required.");
+    }
+  }
+}
+
+async function extractPostInfo(context, href, index) {
+  const fullUrl = `https://www.instagram.com${href}`;
+  const postPage = await context.newPage();
+
+  try {
+    await postPage.goto(fullUrl, { timeout: 10000 });
+    await postPage.waitForSelector("article header a", { timeout: 5000 });
+
+    const username = await postPage
+      .$eval("article header a", (el) => el.innerText)
+      .catch(() => "unknown");
+    const caption = await postPage
+      .$eval("div.C4VMK > span", (el) => el.innerText)
+      .catch(() => "");
+
+    return {
+      id: index + 1,
+      username,
+      caption,
+      postUrl: fullUrl,
+    };
+  } catch (err) {
+    console.warn(`[WARN] Failed to read post: ${href}`);
+    return null;
+  } finally {
+    await postPage.close();
+  }
 }
 
 async function searchInstagram(keyword, limit = 20) {
   const browser = await chromium.launch({ headless: false });
-
-  if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(
-      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
-    );
-    console.log("โหลด session จากไฟล์ storageStateIG.json");
-  }
+  await loadCachedStorageState();
 
   if (!cachedStorageState) {
     await loginAndCacheSession(browser);
@@ -42,80 +79,53 @@ async function searchInstagram(keyword, limit = 20) {
     storageState: cachedStorageState,
   });
   const page = await context.newPage();
-
-  // ไปที่หน้า hashtag search เช่น https://www.instagram.com/explore/tags/keyword/
   const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(
     keyword
   )}/`;
+
   await page.goto(searchUrl);
+  await page.waitForSelector("article a", { timeout: 10000 });
 
-  await page.waitForSelector("article > div img", { timeout: 10000 });
+  const results = new Map();
+  let seenLinks = new Set();
+  let attempts = 0;
 
-  const results = [];
-  let postHandles = [];
+  while (results.size < limit && attempts < 10) {
+    const links = await page.$$eval("article a", (anchors) =>
+      anchors
+        .map((a) => a.getAttribute("href"))
+        .filter((href) => href && href.includes("/p/"))
+    );
 
-  // เลื่อนโหลดโพสต์เรื่อยๆ จนกว่าจะได้ limit ที่ต้องการ
-  while (results.length < limit) {
-    postHandles = await page.$$("article div div div div a");
+    for (const href of links) {
+      if (results.size >= limit || seenLinks.has(href)) continue;
+      seenLinks.add(href);
 
-    for (const postHandle of postHandles) {
-      if (results.length >= limit) break;
-
-      // ดึง url ของโพสต์
-      const postUrl = await postHandle.getAttribute("href");
-
-      // ดึงชื่อเจ้าของโพสต์จาก url เช่น /username/p/xxxxxx/
-      const username = postUrl.split("/")[1];
-
-      // กดเข้าโพสต์เพื่อดึง caption หรือรายละเอียดอื่น ๆ
-      const postPage = await context.newPage();
-      await postPage.goto(`https://www.instagram.com${postUrl}`);
-
-      await postPage
-        .waitForSelector("article header a", { timeout: 5000 })
-        .catch(() => {});
-
-      // ดึง caption ด้วย selector ที่เสถียรกว่า
-      const caption = await postPage
-        .$eval("div.C4VMK > span", (el) => el.innerText)
-        .catch(() => "");
-
-      // เพิ่มข้อมูลลง results
-      results.push({
-        id: results.length + 1,
-        username,
-        postUrl: `https://www.instagram.com${postUrl}`,
-        caption,
-      });
-
-      await postPage.close();
+      const postInfo = await extractPostInfo(context, href, results.size);
+      if (postInfo) results.set(href, postInfo);
     }
 
-    // เลื่อนหน้าลงไปโหลดโพสต์เพิ่ม
     await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-    await page.waitForTimeout(2000);
-
-    // ถ้าโหลดไม่ขึ้นเพิ่มให้ break
-    const newPostHandles = await page.$$("article div div div div a");
-    if (newPostHandles.length <= postHandles.length) break;
+    await page.waitForTimeout(1500);
+    attempts++;
   }
 
   await context.close();
   await browser.close();
-  return results.slice(0, limit);
+
+  return Array.from(results.values()).slice(0, limit);
 }
 
 async function handleSearch(req, res) {
   const { q, limit } = req.query;
-
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = limit ? parseInt(limit) : 20;
+    const numLimit = parseInt(limit, 10) || 20;
     const results = await searchInstagram(q, numLimit);
     res.json({ results });
   } catch (err) {
-    console.error("Search error:", err);
+    console.error("[ERROR] Search failed:", err);
     res.status(500).json({ error: "Search failed" });
   }
 }

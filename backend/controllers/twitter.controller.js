@@ -1,54 +1,68 @@
-const fs = require("fs");
+const fs = require("fs/promises");
+const path = require("path");
 const { chromium } = require("playwright");
-const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
 
+const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
 let cachedStorageState = null;
 
 async function loginAndCacheSession(browser) {
-  console.log("เปิด browser เพื่อ login Twitter...");
+  console.log("[INFO] Opening browser for Twitter login...");
   const context = await browser.newContext();
   const page = await context.newPage();
 
   await page.goto("https://twitter.com/login");
-  console.log("กรุณาล็อกอินใน browser นี้...");
+  console.log("[ACTION] Please log in manually in the opened browser...");
 
-  // รอจนกว่าจะเห็น feed หรือหน้า home ของ Twitter (login สำเร็จ)
-  // await page.waitForSelector('nav[aria-label="Primary"]', { timeout: 0 });
-  await page.waitForURL("https://www.twitter.com/", { timeout: 0 });
-
+  await page.waitForURL("https://x.com/home", { timeout: 0 });
   cachedStorageState = await context.storageState();
 
-  fs.writeFileSync(
+  await fs.mkdir(path.dirname(STORAGE_STATE_PATH), { recursive: true });
+  await fs.writeFile(
     STORAGE_STATE_PATH,
     JSON.stringify(cachedStorageState, null, 2)
   );
-  console.log("บันทึก session ลงไฟล์สำเร็จ");
+  console.log("[SUCCESS] Twitter session cached.");
 
-  // ไม่ปิด context เพื่อให้ session ค้างไว้ (ตามแต่ถ้าอยากปิดให้แก้)
   await context.close();
+}
+
+async function loadCachedStorageState() {
+  if (!cachedStorageState) {
+    try {
+      const data = await fs.readFile(STORAGE_STATE_PATH, "utf-8");
+      cachedStorageState = JSON.parse(data);
+      console.log("[INFO] Loaded cached Twitter session.");
+    } catch {
+      console.warn("[WARN] No cached Twitter session found.");
+    }
+  }
+}
+
+async function extractTweetData(tweet) {
+  const getText = async (selector) =>
+    tweet.$eval(selector, (el) => el.innerText).catch(() => null);
+  const getHref = async (selector) =>
+    tweet.$eval(selector, (el) => el.href).catch(() => null);
+
+  const username = (await getText('div[dir="ltr"] > span')) || "unknown";
+  const caption = (await getText('div[data-testid="tweetText"]')) || "unknown";
+  const postUrl =
+    (await getHref('a[role="link"][href*="/status/"]')) || "unknown";
+
+  return { username, caption, postUrl };
 }
 
 async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
   const browser = await chromium.launch({ headless: false });
+  await loadCachedStorageState();
 
-  // โหลด session จากไฟล์ ถ้ายังไม่มีใน memory
-  if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(
-      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
-    );
-    console.log("โหลด session จากไฟล์ storageStateTwitter.json");
-  }
-
-  if (!cachedStorageState) {
-    await loginAndCacheSession(browser);
-  }
+  if (!cachedStorageState) await loginAndCacheSession(browser);
 
   const context = await browser.newContext({
     storageState: cachedStorageState,
   });
   const page = await context.newPage();
 
-  // สร้าง query string สำหรับ date filter
   let query = keyword;
   if (sinceDate) query += ` since:${sinceDate}`;
   if (untilDate) query += ` until:${untilDate}`;
@@ -62,46 +76,35 @@ async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
     timeout: 10000,
   });
 
-  const results = [];
-  let lastHeight = 0;
+  const results = new Map();
   let idCounter = 1;
+  let previousHeight = 0;
 
-  while (results.length < limit) {
+  while (results.size < limit) {
     const tweets = await page.$$("article");
 
     for (const tweet of tweets) {
-      if (results.length >= limit) break;
+      if (results.size >= limit) break;
 
-      const username = await tweet
-        .$eval('div[dir="ltr"] > span', (el) => el.innerText)
-        .catch(() => "unknown");
-      const caption = await tweet
-        .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
-        .catch(() => "unknown");
-      const postUrl = await tweet
-        .$eval('a[role="link"][href*="/status/"]', (a) => a.href)
-        .catch(() => "unknown");
+      const { username, caption, postUrl } = await extractTweetData(tweet);
 
-      if (caption !== "unknown") {
-        if (!results.some((r) => r.contact === postUrl)) {
-          results.push({ id: idCounter++, username, caption, postUrl });
-        }
+      if (caption !== "unknown" && !results.has(postUrl)) {
+        results.set(postUrl, { id: idCounter++, username, caption, postUrl });
       }
     }
 
-    lastHeight = await page.evaluate("document.body.scrollHeight");
-    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
+    previousHeight = await page.evaluate(() => document.body.scrollHeight);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(2000);
 
-    const newHeight = await page.evaluate("document.body.scrollHeight");
-    if (newHeight === lastHeight) break; // เลื่อนจนสุดแล้ว
+    const currentHeight = await page.evaluate(() => document.body.scrollHeight);
+    if (currentHeight === previousHeight) break;
   }
 
-  // เมื่อเสร็จแล้วปิด context
   await context.close();
   await browser.close();
 
-  return results.slice(0, limit);
+  return Array.from(results.values()).slice(0, limit);
 }
 
 async function handleSearch(req, res) {
@@ -110,11 +113,11 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = limit ? parseInt(limit) : 10;
+    const numLimit = parseInt(limit, 10) || 10;
     const results = await searchTwitter(q, numLimit, since, until);
     res.json({ results });
   } catch (err) {
-    console.error("Search error:", err);
+    console.error("[ERROR] Search failed:", err);
     res.status(500).json({ error: "Search failed" });
   }
 }
