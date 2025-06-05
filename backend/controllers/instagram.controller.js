@@ -100,6 +100,7 @@ async function searchInstagram(keyword, limit = 20) {
     if (newPostHandles.length <= postHandles.length) break;
   }
 
+  await context.close();
   await browser.close();
   return results.slice(0, limit);
 }

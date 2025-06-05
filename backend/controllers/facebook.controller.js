@@ -62,7 +62,7 @@ async function searchFacebook(keyword, limit = 20) {
     for (const post of posts) {
       if (results.length >= limit) break;
 
-      const name =
+      const username =
         (await post
           .$eval("strong a", (el) => el.innerText)
           .catch(() => null)) ||
@@ -72,16 +72,16 @@ async function searchFacebook(keyword, limit = 20) {
         (await post
           .$eval('div[dir="auto"] span', (el) => el.innerText)
           .catch(() => "unknown"));
-      const info = await post
+      const caption = await post
         .$eval('div[dir="auto"]', (el) => el.innerText)
         .catch(() => "unknown");
-      const link = await post
+      const postUrl = await post
         .$eval('a[tabindex="0"]', (a) => a.href)
         .catch(() => "unknown");
 
-      if (info !== "unknown") {
-        if (!results.some((r) => r.contact === link)) {
-          results.push({ id: idCounter++, name, info, link });
+      if (caption !== "unknown") {
+        if (!results.some((r) => r.contact === postUrl)) {
+          results.push({ id: idCounter++, username, caption, postUrl });
         }
       }
     }
@@ -93,7 +93,8 @@ async function searchFacebook(keyword, limit = 20) {
     const newHeight = await page.evaluate("document.body.scrollHeight");
     if (newHeight === lastHeight) break;
   }
-
+  await context.close();
+  await browser.close();
   return results.slice(0, limit);
 }
 

@@ -72,19 +72,19 @@ async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
     for (const tweet of tweets) {
       if (results.length >= limit) break;
 
-      const name = await tweet
+      const username = await tweet
         .$eval('div[dir="ltr"] > span', (el) => el.innerText)
         .catch(() => "unknown");
-      const info = await tweet
+      const caption = await tweet
         .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
         .catch(() => "unknown");
-      const link = await tweet
+      const postUrl = await tweet
         .$eval('a[role="link"][href*="/status/"]', (a) => a.href)
         .catch(() => "unknown");
 
-      if (info !== "unknown") {
-        if (!results.some((r) => r.contact === link)) {
-          results.push({ id: idCounter++, name, info, link });
+      if (caption !== "unknown") {
+        if (!results.some((r) => r.contact === postUrl)) {
+          results.push({ id: idCounter++, username, caption, postUrl });
         }
       }
     }
@@ -98,8 +98,8 @@ async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
   }
 
   // เมื่อเสร็จแล้วปิด context
-  // await context.close();
-  // await browser.close();
+  await context.close();
+  await browser.close();
 
   return results.slice(0, limit);
 }
