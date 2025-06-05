@@ -77,9 +77,15 @@ async function searchFacebook(keyword, limit = 20) {
     for (const post of posts) {
       if (results.size >= limit) break;
       const { username, caption, postUrl } = await extractPostData(post);
-
+      const sentiment = await analyzeSentiment(caption);
       if (caption !== "unknown" && !results.has(postUrl)) {
-        results.set(postUrl, { id: idCounter++, username, caption, postUrl });
+        results.set(postUrl, {
+          id: idCounter++,
+          username,
+          caption,
+          sentiment,
+          postUrl,
+        });
       }
     }
 

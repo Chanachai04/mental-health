@@ -1,6 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
 const { chromium } = require("playwright");
+const { analyzeSentiment } = require("../utils/sentiment");
 
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
 let cachedStorageState = null;
@@ -87,9 +88,15 @@ async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
       if (results.size >= limit) break;
 
       const { username, caption, postUrl } = await extractTweetData(tweet);
-
+      const sentiment = await analyzeSentiment(caption);
       if (caption !== "unknown" && !results.has(postUrl)) {
-        results.set(postUrl, { id: idCounter++, username, caption, postUrl });
+        results.set(postUrl, {
+          id: idCounter++,
+          username,
+          caption,
+          sentiment,
+          postUrl,
+        });
       }
     }
 
