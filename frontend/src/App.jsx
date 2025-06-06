@@ -6,6 +6,9 @@ import {
   Hash,
   ExternalLink,
   Loader2,
+  Facebook,
+  Instagram,
+  Twitter,
 } from "lucide-react";
 
 function App() {
@@ -23,7 +26,6 @@ function App() {
 
     setLoading(true);
     try {
-      // Simulated API call - replace with your actual endpoint
       const res = await fetch(
         `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(
           keyword
@@ -45,16 +47,16 @@ function App() {
     }
   };
 
-  const getPlatformIcon = (platform) => {
+  const getPlatformIcon = (platform, className = "w-4 h-4") => {
     switch (platform) {
       case "facebook":
-        return "📘";
+        return <Facebook className={className + " text-blue-600"} />;
       case "instagram":
-        return "📸";
+        return <Instagram className={className + " text-pink-500"} />;
       case "twitter":
-        return "🐦";
+        return <Twitter className={className + " text-sky-500"} />;
       default:
-        return "🌐";
+        return null;
     }
   };
 
@@ -68,21 +70,18 @@ function App() {
     return "bg-blue-100 text-blue-700";
   };
 
-  // ฟังก์ชันสำหรับไฮไลต์คำค้นหา
   const highlightKeyword = (text, searchKeyword) => {
     if (!text || !searchKeyword.trim()) {
       return text;
     }
 
-    // แยกคำค้นหาออกเป็นคำๆ (กรณีที่มีหลายคำ)
     const keywords = searchKeyword.trim().split(/\s+/);
     let highlightedText = text;
 
     keywords.forEach((keyword) => {
       if (keyword.length > 0) {
-        // สร้าง regex ที่ไม่สนใจตัวพิมพ์เล็ก-ใหญ่
         const regex = new RegExp(
-          `(${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+          `(${keyword.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")})`,
           "gi"
         );
         highlightedText = highlightedText.replace(
@@ -95,7 +94,6 @@ function App() {
     return highlightedText;
   };
 
-  // Component สำหรับแสดงข้อความที่ไฮไลต์แล้ว
   const HighlightedText = ({ text, searchKeyword, className = "" }) => {
     const highlightedHTML = highlightKeyword(text, searchKeyword);
 
@@ -110,7 +108,6 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-4">
             <Search className="w-8 h-8 text-white" />
@@ -123,10 +120,8 @@ function App() {
           </p>
         </div>
 
-        {/* Search Form */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 mb-8">
           <div className="grid gap-6">
-            {/* Keyword Input */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Hash className="w-4 h-4" />
@@ -146,14 +141,13 @@ function App() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Limit Input */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                   <Users className="w-4 h-4" />
                   จำนวนผลลัพธ์
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   min={1}
                   max={100}
                   value={limit}
@@ -162,7 +156,6 @@ function App() {
                 />
               </div>
 
-              {/* Platform Select */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                   <MessageCircle className="w-4 h-4" />
@@ -173,14 +166,13 @@ function App() {
                   onChange={(e) => setPlatform(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 bg-white"
                 >
-                  <option value="facebook">📘 Facebook</option>
-                  <option value="instagram">📸 Instagram</option>
-                  <option value="twitter">🐦 Twitter</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="twitter">Twitter</option>
                 </select>
               </div>
             </div>
 
-            {/* Search Button */}
             <button
               onClick={handleSearch}
               disabled={loading || !keyword.trim()}
@@ -201,7 +193,6 @@ function App() {
           </div>
         </div>
 
-        {/* Results */}
         {!loading && results.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center gap-3 mb-6">
@@ -212,7 +203,7 @@ function App() {
               </div>
               <h2 className="text-2xl font-bold text-gray-800">ผลการค้นหา</h2>
               <div className="flex items-center gap-1 text-sm text-gray-500">
-                <span>{getPlatformIcon(platform)}</span>
+                {getPlatformIcon(platform, "w-4 h-4")}
                 <span className="capitalize">{platform}</span>
               </div>
               {keyword && (
@@ -239,9 +230,7 @@ function App() {
                       <div>
                         <h3 className="font-semibold text-gray-800 flex items-center gap-2">
                           {item.username || "Unknown User"}
-                          <span className="text-xs">
-                            {getPlatformIcon(platform)}
-                          </span>
+                          {getPlatformIcon(platform)}
                         </h3>
                       </div>
                     </div>
@@ -284,7 +273,6 @@ function App() {
           </div>
         )}
 
-        {/* Empty State */}
         {!loading && results.length === 0 && keyword && (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -299,7 +287,6 @@ function App() {
           </div>
         )}
 
-        {/* Loading State */}
         {loading && (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
