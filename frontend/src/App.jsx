@@ -14,9 +14,37 @@ import {
 function App() {
   const [keyword, setKeyword] = useState("");
   const [limit, setLimit] = useState(10);
-  const [platform, setPlatform] = useState("facebook");
+  const [selectedPlatforms, setSelectedPlatforms] = useState(["facebook"]);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  const platforms = [
+    {
+      id: "facebook",
+      name: "Facebook",
+      icon: Facebook,
+      color: "text-blue-600",
+    },
+    {
+      id: "instagram",
+      name: "Instagram",
+      icon: Instagram,
+      color: "text-pink-500",
+    },
+    { id: "twitter", name: "Twitter", icon: Twitter, color: "text-sky-500" },
+  ];
+
+  const handlePlatformChange = (platformId) => {
+    setSelectedPlatforms((prev) => {
+      if (prev.includes(platformId)) {
+        // ลบออกถ้ามีอยู่แล้ว แต่ต้องมีอย่างน้อย 1 แพลตฟอร์ม
+        return prev.length > 1 ? prev.filter((p) => p !== platformId) : prev;
+      } else {
+        // เพิ่มเข้าไปถ้ายังไม่มี
+        return [...prev, platformId];
+      }
+    });
+  };
 
   const handleSearch = async () => {
     if (!keyword.trim()) {
@@ -24,15 +52,37 @@ function App() {
       return;
     }
 
+    if (selectedPlatforms.length === 0) {
+      alert("กรุณาเลือกอย่างน้อย 1 แพลตฟอร์ม");
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch(
-        `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(
-          keyword
-        )}&limit=${limit}`
-      );
-      const data = await res.json();
-      setResults(data.results || []);
+      // ค้นหาจากหลายแพลตฟอร์มพร้อมกัน
+      const searchPromises = selectedPlatforms.map(async (platform) => {
+        const res = await fetch(
+          `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(
+            keyword
+          )}&limit=${limit}`
+        );
+        const data = await res.json();
+        return (data.results || []).map((result) => ({
+          ...result,
+          platform: platform, // เพิ่มข้อมูลแพลตฟอร์มให้แต่ละผลลัพธ์
+        }));
+      });
+
+      const allResults = await Promise.all(searchPromises);
+      const combinedResults = allResults.flat();
+
+      // เรียงลำดับผลลัพธ์ตามความเกี่ยวข้อง (ถ้ามี) หรือตามวันที่
+      const sortedResults = combinedResults.sort((a, b) => {
+        // สามารถปรับเกณฑ์การเรียงลำดับได้ตามต้องการ
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
+
+      setResults(sortedResults);
     } catch (err) {
       console.error("Error:", err);
       alert("ค้นหาไม่สำเร็จ");
@@ -48,16 +98,11 @@ function App() {
   };
 
   const getPlatformIcon = (platform, className = "w-4 h-4") => {
-    switch (platform) {
-      case "facebook":
-        return <Facebook className={className + " text-blue-600"} />;
-      case "instagram":
-        return <Instagram className={className + " text-pink-500"} />;
-      case "twitter":
-        return <Twitter className={className + " text-sky-500"} />;
-      default:
-        return null;
-    }
+    const platformData = platforms.find((p) => p.id === platform);
+    if (!platformData) return null;
+
+    const IconComponent = platformData.icon;
+    return <IconComponent className={`${className} ${platformData.color}`} />;
   };
 
   const getSentimentColor = (sentiment) => {
@@ -107,21 +152,24 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-4">
-            <Search className="w-8 h-8 text-white" />
+      <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 max-w-7xl">
+        {/* Header Section */}
+        <div className="text-center mb-6 sm:mb-8 lg:mb-12">
+          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-3 sm:mb-4">
+            <Search className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
           </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
             Social Search
           </h1>
-          <p className="text-gray-600 text-lg">
+          <p className="text-gray-600 text-sm sm:text-base lg:text-lg px-4">
             ค้นหาโพสต์จาก Social Media ได้อย่างง่ายดาย
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 mb-8">
-          <div className="grid gap-6">
+        {/* Search Form */}
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+          <div className="space-y-4 sm:space-y-6">
+            {/* Keyword Input */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Hash className="w-4 h-4" />
@@ -134,49 +182,70 @@ function App() {
                   onChange={(e) => setKeyword(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="เช่น car, ขายของ, รีวิวสินค้า..."
-                  className="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 placeholder-gray-400"
+                  className="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 placeholder-gray-400 text-sm sm:text-base"
                 />
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  จำนวนผลลัพธ์
-                </label>
-                <input
-                  type="text"
-                  min={1}
-                  max={100}
-                  value={limit}
-                  onChange={(e) => setLimit(Number(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4" />
-                  แพลตฟอร์ม
-                </label>
-                <select
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 bg-white"
-                >
-                  <option value="facebook">Facebook</option>
-                  <option value="instagram">Instagram</option>
-                  <option value="twitter">Twitter</option>
-                </select>
-              </div>
+            {/* Limit Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                จำนวนผลลัพธ์ (ต่อแพลตฟอร์ม)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 text-sm sm:text-base"
+              />
             </div>
 
+            {/* Platform Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <MessageCircle className="w-4 h-4" />
+                แพลตฟอร์ม
+              </label>
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 lg:gap-6">
+                {platforms.map((platform) => {
+                  const IconComponent = platform.icon;
+                  return (
+                    <label
+                      key={platform.id}
+                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedPlatforms.includes(platform.id)}
+                        onChange={() => handlePlatformChange(platform.id)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                      <IconComponent className={`w-5 h-5 ${platform.color}`} />
+                      <span className="text-gray-700 font-medium text-sm sm:text-base">
+                        {platform.name}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {selectedPlatforms.length > 0 && (
+                <div className="text-xs text-gray-500 mt-2">
+                  เลือกแล้ว {selectedPlatforms.length} แพลตฟอร์ม
+                </div>
+              )}
+            </div>
+
+            {/* Search Button */}
             <button
               onClick={handleSearch}
-              disabled={loading || !keyword.trim()}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl disabled:cursor-not-allowed"
+              disabled={
+                loading || !keyword.trim() || selectedPlatforms.length === 0
+              }
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-sm sm:text-base"
             >
               {loading ? (
                 <>
@@ -186,83 +255,97 @@ function App() {
               ) : (
                 <>
                   <Search className="w-5 h-5" />
-                  เริ่มค้นหา
+                  <span className="hidden xs:inline">
+                    เริ่มค้นหา ({selectedPlatforms.length} แพลตฟอร์ม)
+                  </span>
+                  <span className="xs:hidden">ค้นหา</span>
                 </>
               )}
             </button>
           </div>
         </div>
 
+        {/* Results Section */}
         {!loading && results.length > 0 && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 mb-6">
+            {/* Results Header */}
+            <div className="flex items-center gap-3 mb-4 sm:mb-6 flex-wrap">
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-green-600 font-semibold">
+                <span className="text-green-600 font-semibold text-sm">
                   {results.length}
                 </span>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800">ผลการค้นหา</h2>
-              <div className="flex items-center gap-1 text-sm text-gray-500">
-                {getPlatformIcon(platform, "w-4 h-4")}
-                <span className="capitalize">{platform}</span>
-              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
+                ผลการค้นหา
+              </h2>
+
               {keyword && (
-                <div className="flex items-center gap-2 text-sm text-gray-600 bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200">
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200">
                   <span>คำค้นหา:</span>
-                  <span className="font-semibold text-yellow-800">
+                  <span className="font-semibold text-yellow-800 max-w-32 sm:max-w-none truncate">
                     {keyword}
                   </span>
                 </div>
               )}
             </div>
 
-            <div className="grid gap-4">
+            {/* Results Grid */}
+            <div className="grid gap-3 sm:gap-4">
               {results.map((item, index) => (
                 <div
-                  key={item.id || index}
-                  className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:border-blue-200"
+                  key={`${item.platform}-${item.id || index}`}
+                  className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 hover:shadow-lg transition-all duration-200 hover:border-blue-200"
                 >
-                  <div className="flex items-start justify-between gap-4 mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+                  {/* Result Header */}
+                  <div className="flex items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
                         {(item.username || "U").charAt(0).toUpperCase()}
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                          {item.username || "Unknown User"}
-                          {getPlatformIcon(platform)}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm sm:text-base truncate">
+                          <span className="truncate">
+                            {item.username || "Unknown User"}
+                          </span>
+                          {getPlatformIcon(item.platform)}
                         </h3>
+                        <div className="text-xs text-gray-500 capitalize">
+                          {item.platform}
+                        </div>
                       </div>
                     </div>
 
                     {item.sentiment && (
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${getSentimentColor(
+                        className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getSentimentColor(
                           item.sentiment
                         )}`}
                       >
-                        AI: {item.sentiment}
+                        <span className="hidden sm:inline">AI: </span>
+                        {item.sentiment}
                       </span>
                     )}
                   </div>
 
+                  {/* Result Content */}
                   <div className="mb-4">
                     <HighlightedText
                       text={item.caption || item.info || "ไม่มีข้อความ"}
                       searchKeyword={keyword}
-                      className="text-gray-700 leading-relaxed"
+                      className="text-gray-700 leading-relaxed text-sm sm:text-base break-words"
                     />
                   </div>
 
+                  {/* Result Footer */}
                   {(item.postUrl || item.contact) && (
                     <div className="flex justify-end">
                       <a
                         href={item.postUrl || item.contact}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 rounded-lg transition-all duration-200 text-sm font-medium hover:text-blue-700"
+                        className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 rounded-lg transition-all duration-200 text-xs sm:text-sm font-medium hover:text-blue-700"
                       >
-                        <ExternalLink className="w-4 h-4" />
+                        <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
                         เปิดโพสต์
                       </a>
                     </div>
@@ -273,29 +356,33 @@ function App() {
           </div>
         )}
 
+        {/* No Results State */}
         {!loading && results.length === 0 && keyword && (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Search className="w-8 h-8 text-gray-400" />
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-600 mb-2">
               ไม่พบผลลัพธ์
             </h3>
-            <p className="text-gray-500">
-              ลองเปลี่ยนคำค้นหาหรือแพลตฟอร์มดูครับ
+            <p className="text-gray-500 text-sm sm:text-base px-4">
+              ลองเปลี่ยนคำค้นหาหรือเลือกแพลตฟอร์มอื่นดูครับ
             </p>
           </div>
         )}
 
+        {/* Loading State */}
         {loading && (
-          <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <div className="text-center py-8 sm:py-12">
+            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-full mb-4">
+              <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 animate-spin" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">
-              กำลังค้นหา...
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">
+              กำลังค้นหาจาก {selectedPlatforms.length} แพลตฟอร์ม...
             </h3>
-            <p className="text-gray-500">รอสักครู่นะครับ</p>
+            <p className="text-gray-500 text-sm sm:text-base">
+              รอสักครู่นะครับ
+            </p>
           </div>
         )}
       </div>
