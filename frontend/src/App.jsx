@@ -1,5 +1,6 @@
 import {useState} from "react";
 import {Search, Users, MessageCircle, Hash, ExternalLink, Loader2, Facebook, Instagram, Twitter, ChevronDown} from "lucide-react";
+import { FaXTwitter } from "react-icons/fa6";
 
 function App() {
     const [keyword, setKeyword] = useState("");
@@ -22,7 +23,7 @@ function App() {
             icon: Instagram,
             color: "text-pink-500",
         },
-        {id: "twitter", name: "Twitter", icon: Twitter, color: "text-sky-500"},
+        {id: "X", name: "X", icon: FaXTwitter, color: "text-black-500"},
     ];
 
     const handlePlatformChange = (platformId) => {
