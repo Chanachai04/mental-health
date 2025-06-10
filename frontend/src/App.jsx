@@ -1,12 +1,13 @@
 import {useState} from "react";
-import {Search, Users, MessageCircle, Hash, ExternalLink, Loader2, Facebook, Instagram, Twitter} from "lucide-react";
+import {Search, Users, MessageCircle, Hash, ExternalLink, Loader2, Facebook, Instagram, Twitter, ChevronDown} from "lucide-react";
 
 function App() {
     const [keyword, setKeyword] = useState("");
     const [limit, setLimit] = useState(10);
-    const [selectedPlatforms, setSelectedPlatforms] = useState(["facebook"]);
+    const [selectedPlatform, setSelectedPlatform] = useState("facebook");
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [dropdownOpen, setDropdownOpen] = useState(false);
 
     const platforms = [
         {
@@ -25,15 +26,8 @@ function App() {
     ];
 
     const handlePlatformChange = (platformId) => {
-        setSelectedPlatforms((prev) => {
-            if (prev.includes(platformId)) {
-                // ลบออกถ้ามีอยู่แล้ว แต่ต้องมีอย่างน้อย 1 แพลตฟอร์ม
-                return prev.length > 1 ? prev.filter((p) => p !== platformId) : prev;
-            } else {
-                // เพิ่มเข้าไปถ้ายังไม่มี
-                return [...prev, platformId];
-            }
-        });
+        setSelectedPlatform(platformId);
+        setDropdownOpen(false); // ปิด dropdown หลังเลือก
     };
 
     const handleSearch = async () => {
@@ -42,28 +36,23 @@ function App() {
             return;
         }
 
-        if (selectedPlatforms.length === 0) {
-            alert("กรุณาเลือกอย่างน้อย 1 แพลตฟอร์ม");
+        if (selectedPlatform.length === 0) {
+            alert("กรุณาเลือกแพลตฟอร์ม");
             return;
         }
 
         setLoading(true);
         try {
-            // ค้นหาจากหลายแพลตฟอร์มพร้อมกัน
-            const searchPromises = selectedPlatforms.map(async (platform) => {
-                const res = await fetch(`http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(keyword)}&limit=${limit}`);
-                const data = await res.json();
-                return (data.results || []).map((result) => ({
-                    ...result,
-                    platform: platform, // เพิ่มข้อมูลแพลตฟอร์มให้แต่ละผลลัพธ์
-                }));
-            });
-
-            const allResults = await Promise.all(searchPromises);
-            const combinedResults = allResults.flat();
+            // ค้นหาจากแพลตฟอร์มที่เลือก
+            const res = await fetch(`http://localhost:3000/api/${selectedPlatform}/search?q=${encodeURIComponent(keyword)}&limit=${limit}`);
+            const data = await res.json();
+            const results = (data.results || []).map((result) => ({
+                ...result,
+                platform: selectedPlatform, // เพิ่มข้อมูลแพลตฟอร์มให้แต่ละผลลัพธ์
+            }));
 
             // เรียงลำดับผลลัพธ์ตามความเกี่ยวข้อง (ถ้ามี) หรือตามวันที่
-            const sortedResults = combinedResults.sort((a, b) => {
+            const sortedResults = results.sort((a, b) => {
                 // สามารถปรับเกณฑ์การเรียงลำดับได้ตามต้องการ
                 return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
             });
@@ -123,6 +112,10 @@ function App() {
         return <div className={className} dangerouslySetInnerHTML={{__html: highlightedHTML}} />;
     };
 
+    const getSelectedPlatformName = () => {
+        return platforms.find((p) => p.id === selectedPlatform)?.name || "เลือกแพลตฟอร์ม";
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
             <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 max-w-7xl">
@@ -173,36 +166,50 @@ function App() {
                             />
                         </div>
 
-                        {/* Platform Selection */}
+                        {/* Platform Selection - Dropdown */}
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                                 <MessageCircle className="w-4 h-4" />
                                 แพลตฟอร์ม
                             </label>
-                            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 lg:gap-6">
-                                {platforms.map((platform) => {
-                                    const IconComponent = platform.icon;
-                                    return (
-                                        <label key={platform.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedPlatforms.includes(platform.id)}
-                                                onChange={() => handlePlatformChange(platform.id)}
-                                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                                            />
-                                            <IconComponent className={`w-5 h-5 ${platform.color}`} />
-                                            <span className="text-gray-700 font-medium text-sm sm:text-base">{platform.name}</span>
-                                        </label>
-                                    );
-                                })}
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 text-sm sm:text-base bg-white flex items-center justify-between"
+                                >
+                                    <span className="truncate">{getSelectedPlatformName()}</span>
+                                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
+                                </button>
+
+                                {dropdownOpen && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg">
+                                        {platforms.map((platform) => {
+                                            const IconComponent = platform.icon;
+                                            const isSelected = selectedPlatform === platform.id;
+                                            return (
+                                                <div
+                                                    key={platform.id}
+                                                    onClick={() => handlePlatformChange(platform.id)}
+                                                    className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl ${
+                                                        isSelected ? "bg-blue-50" : ""
+                                                    }`}
+                                                >
+                                                    <IconComponent className={`w-5 h-5 ${platform.color}`} />
+                                                    <span className={`font-medium text-sm sm:text-base ${isSelected ? "text-blue-700" : "text-gray-700"}`}>{platform.name}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                            {selectedPlatforms.length > 0 && <div className="text-xs text-gray-500 mt-2">เลือกแล้ว {selectedPlatforms.length} แพลตฟอร์ม</div>}
+                            {selectedPlatform && <div className="text-xs text-gray-500 mt-2">เลือกแล้ว: {getSelectedPlatformName()}</div>}
                         </div>
 
                         {/* Search Button */}
                         <button
                             onClick={handleSearch}
-                            disabled={loading || !keyword.trim() || selectedPlatforms.length === 0}
+                            disabled={loading || !keyword.trim() || !selectedPlatform}
                             className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-sm sm:text-base"
                         >
                             {loading ? (
@@ -213,7 +220,7 @@ function App() {
                             ) : (
                                 <>
                                     <Search className="w-5 h-5" />
-                                    <span className="hidden xs:inline">เริ่มค้นหา ({selectedPlatforms.length} แพลตฟอร์ม)</span>
+                                    <span className="hidden xs:inline">เริ่มค้นหา ({getSelectedPlatformName()})</span>
                                     <span className="xs:hidden">ค้นหา</span>
                                 </>
                             )}
@@ -315,7 +322,7 @@ function App() {
                         <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-full mb-4">
                             <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 animate-spin" />
                         </div>
-                        <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">กำลังค้นหาจาก {selectedPlatforms.length} แพลตฟอร์ม...</h3>
+                        <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">กำลังค้นหาจาก {getSelectedPlatformName()}...</h3>
                         <p className="text-gray-500 text-sm sm:text-base">รอสักครู่นะครับ</p>
                     </div>
                 )}
