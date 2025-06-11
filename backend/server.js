@@ -4,6 +4,7 @@ const cors = require("cors");
 const facebookRoutes = require("./routers/facebook.route");
 const twitterRoutes = require("./routers/twitter.route");
 const instagramRoutes = require("./routers/instagram.route");
+const { handleSearch } = require("./controllers/tiktok.controller");
 const tiktokRoutes = require("./routers/tiktok.route");
 
 const app = express();

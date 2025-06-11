@@ -1,318 +1,536 @@
-const fs = require("fs");
 const { chromium } = require("playwright");
-const STORAGE_STATE_PATH = "./sessions/storageStateTiktok.json";
 
-let cachedStorageState = null;
+// Simplified configuration
+const CONFIG = {
+  MAX_RETRIES: 3,
+  TIMEOUT: 30000,
+  SCROLL_TIMES: 2,
+  REQUEST_DELAY: { min: 1500, max: 3500 },
+  MAX_RESULTS: 15,
+};
 
-async function loginAndCacheSession(browser) {
-  console.log("เปิด browser เพื่อ login TikTok...");
-  const context = await browser.newContext();
-  const page = await context.newPage();
+// User Agent pool
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+];
 
-  await page.goto("https://www.tiktok.com/login");
-  console.log("กรุณาล็อกอินใน browser ที่เปิดขึ้นมา...");
+// Viewports
+const VIEWPORTS = [
+  { width: 1920, height: 1080 },
+  { width: 1366, height: 768 },
+  { width: 1440, height: 900 },
+];
 
-  // รอให้ redirect ไปหน้าหลักหลังจาก login สำเร็จ
-  await page.waitForURL("https://www.tiktok.com/", { timeout: 0 });
-
-  cachedStorageState = await context.storageState();
-  fs.writeFileSync(
-    STORAGE_STATE_PATH,
-    JSON.stringify(cachedStorageState, null, 2)
-  );
-  console.log("บันทึก session ลงไฟล์เรียบร้อยแล้ว");
-
-  await context.close();
+// Utility functions
+function getRandomElement(array) {
+  return array[Math.floor(Math.random() * array.length)];
 }
 
-async function searchTiktok(keyword, limit = 10) {
-  const browser = await chromium.launch({ headless: false, slowMo: 100 });
+function randomDelay(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
-  if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(
-      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
-    );
-    console.log("โหลด session จากไฟล์ storageStateTiktok.json");
-  }
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  if (!cachedStorageState) {
-    await loginAndCacheSession(browser);
-  }
-
-  const context = await browser.newContext({
-    storageState: cachedStorageState,
-  });
-  const page = await context.newPage();
-
-  // ค้นหาผ่าน hashtag หรือ keyword
-  const searchUrl = `https://www.tiktok.com/tag/${encodeURIComponent(
-    keyword.replace("#", "")
-  )}`;
-  await page.goto(searchUrl, { waitUntil: "load" });
-
-  // เพิ่ม scroll เพื่อโหลดวิดีโอเพิ่มเติม
-  for (let i = 0; i < 5; i++) {
-    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-    await page.waitForTimeout(3000);
-  }
-
-  // selector สำหรับวิดีโอ TikTok
-  const videoSelector = 'div[data-e2e="challenge-item"] a, a[href*="/video/"]';
+// Function to extract username from TikTok URL
+function extractUsernameFromUrl(url) {
+  if (!url) return "Unknown user";
 
   try {
-    await page.waitForSelector(videoSelector, { timeout: 20000 });
-  } catch (err) {
-    await page.screenshot({ path: "tiktok-debug.png", fullPage: true });
-    throw new Error("ไม่สามารถหาวิดีโอบนหน้า TikTok ได้");
+    // Pattern: https://www.tiktok.com/@username/video/...
+    const match = url.match(/@([^\/]+)/);
+    if (match && match[1]) {
+      return match[1];
+    }
+    return "Unknown user";
+  } catch (error) {
+    return "Unknown user";
+  }
+}
+
+// Anti-detection script
+const ANTI_DETECTION_SCRIPT = `
+(() => {
+  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => [{
+      description: "Portable Document Format",
+      filename: "internal-pdf-viewer",
+      name: "Chrome PDF Plugin"
+    }],
+  });
+  
+  delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+  delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+  delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+})();
+`;
+
+// Rate limiter
+class RateLimiter {
+  constructor(tokensPerSecond = 0.5, bucketSize = 3) {
+    this.tokensPerSecond = tokensPerSecond;
+    this.bucketSize = bucketSize;
+    this.tokens = bucketSize;
+    this.lastRefill = Date.now();
   }
 
-  const videoElements = await page.$$(videoSelector);
-  console.log(`เจอวิดีโอทั้งหมด: ${videoElements.length}`);
+  async acquireToken() {
+    this.refillTokens();
+    if (this.tokens >= 1) {
+      this.tokens--;
+      return true;
+    }
 
-  const videoTasks = [];
+    const waitTime = ((1 - this.tokens) / this.tokensPerSecond) * 1000;
+    await sleep(waitTime);
+    return this.acquireToken();
+  }
 
-  for (const video of videoElements.slice(0, limit)) {
-    const videoUrl = await video.getAttribute("href");
-    if (!videoUrl || !videoUrl.includes("/video/")) continue;
+  refillTokens() {
+    const now = Date.now();
+    const timeSinceLastRefill = (now - this.lastRefill) / 1000;
+    const tokensToAdd = timeSinceLastRefill * this.tokensPerSecond;
+    this.tokens = Math.min(this.bucketSize, this.tokens + tokensToAdd);
+    this.lastRefill = now;
+  }
+}
 
-    const fullVideoUrl = videoUrl.startsWith("http")
-      ? videoUrl
-      : "https://www.tiktok.com" + videoUrl;
+const rateLimiter = new RateLimiter();
 
-    const task = (async () => {
-      let videoPage;
-      try {
-        videoPage = await context.newPage();
-        await videoPage.goto(fullVideoUrl, {
-          waitUntil: "load",
-          timeout: 30000,
-        });
+// Browser session manager
+class BrowserSessionManager {
+  constructor() {
+    this.activeSessions = new Map();
+    this.sessionCounter = 0;
+  }
 
-        // รอให้หน้าโหลดเสร็จ
-        await videoPage.waitForTimeout(3000);
+  async createSession() {
+    const sessionId = `session_${++this.sessionCounter}`;
+    const viewport = getRandomElement(VIEWPORTS);
 
-        // ลองหา username จาก selector หลายแบบ
-        let username = "unknown";
-        try {
-          // ลองหา username จาก data-e2e="browse-username"
-          username = await videoPage.$eval(
-            '[data-e2e="browse-username"]',
-            (el) => el.innerText
-          );
-        } catch {
-          try {
-            // ลองหา username จาก span ที่มี unique-id
-            username = await videoPage.$eval(
-              'span[data-e2e="browse-username"]',
-              (el) => el.innerText
-            );
-          } catch {
-            try {
-              // ลองหา username จาก h2 ที่มี data-e2e
-              username = await videoPage.$eval(
-                'h2[data-e2e="browse-username"] span',
-                (el) => el.innerText
-              );
-            } catch {
-              try {
-                // ลองหา username จาก URL pattern
-                const urlMatch = fullVideoUrl.match(/@([^/]+)/);
-                if (urlMatch) {
-                  username = urlMatch[1];
-                }
-              } catch {
-                console.log(`ไม่สามารถหา username ได้สำหรับ ${fullVideoUrl}`);
-              }
-            }
-          }
-        }
+    const browser = await chromium.launch({
+      headless: process.env.NODE_ENV === "production",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-extensions",
+        `--window-size=${viewport.width},${viewport.height}`,
+      ],
+    });
 
-        // ลองหา caption/description จาก selector หลายแบบ
-        let caption = "unknown";
-        try {
-          // ลองหา caption จาก data-e2e="browse-video-desc"
-          caption = await videoPage.$eval(
-            '[data-e2e="browse-video-desc"]',
-            (el) => el.innerText
-          );
-        } catch {
-          try {
-            // ลองหา caption จาก div ที่มี title attribute
-            caption = await videoPage.$eval("div[title]", (el) =>
-              el.getAttribute("title")
-            );
-          } catch {
-            try {
-              // ลองหา caption จาก meta description
-              caption = await videoPage.$eval(
-                'meta[name="description"]',
-                (el) => el.getAttribute("content")
-              );
-              // ตัดข้อมูลส่วนเกินออกจาก caption
-              if (caption && caption.includes(" on TikTok")) {
-                caption = caption.split(" on TikTok")[0];
-              }
-            } catch {
-              try {
-                // ลองหา caption จาก h1
-                caption = await videoPage.$eval("h1", (el) => el.innerText);
-              } catch {
-                console.log(`ไม่สามารถหา caption ได้สำหรับ ${fullVideoUrl}`);
-              }
-            }
-          }
-        }
+    const context = await browser.newContext({
+      viewport,
+      userAgent: getRandomElement(USER_AGENTS),
+      extraHTTPHeaders: {
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+      },
+    });
 
-        // ลองหา likes count
-        let likes = "0";
-        try {
-          likes = await videoPage.$eval(
-            '[data-e2e="like-count"]',
-            (el) => el.innerText
-          );
-        } catch {
-          try {
-            likes = await videoPage.$eval(
-              '[data-e2e="browse-like-count"]',
-              (el) => el.innerText
-            );
-          } catch {
-            console.log(`ไม่สามารถหา likes count ได้สำหรับ ${fullVideoUrl}`);
-          }
-        }
+    await context.addInitScript(ANTI_DETECTION_SCRIPT);
+    const page = await context.newPage();
 
-        // ลองหา comments count
-        let comments = "0";
-        try {
-          comments = await videoPage.$eval(
-            '[data-e2e="comment-count"]',
-            (el) => el.innerText
-          );
-        } catch {
-          try {
-            comments = await videoPage.$eval(
-              '[data-e2e="browse-comment-count"]',
-              (el) => el.innerText
-            );
-          } catch {
-            console.log(`ไม่สามารถหา comments count ได้สำหรับ ${fullVideoUrl}`);
-          }
-        }
+    // Block unnecessary resources
+    await page.route("**/*", (route) => {
+      const resourceType = route.request().resourceType();
+      const url = route.request().url();
 
-        // ลองหา shares count
-        let shares = "0";
-        try {
-          shares = await videoPage.$eval(
-            '[data-e2e="share-count"]',
-            (el) => el.innerText
-          );
-        } catch {
-          try {
-            shares = await videoPage.$eval(
-              '[data-e2e="browse-share-count"]',
-              (el) => el.innerText
-            );
-          } catch {
-            console.log(`ไม่สามารถหา shares count ได้สำหรับ ${fullVideoUrl}`);
-          }
-        }
-
-        // ล้างข้อมูลที่ไม่ต้องการ
-        if (caption && caption !== "unknown") {
-          // ตัด hashtag ออกจากท้ายข้อความ (เก็บไว้บางส่วน)
-          const hashtagPattern = /\s*(#[\w\u0E00-\u0E7F]+\s*){3,}/g;
-          caption = caption.replace(hashtagPattern, " #...");
-
-          // จำกัดความยาว caption
-          if (caption.length > 200) {
-            caption = caption.substring(0, 200) + "...";
-          }
-        }
-
-        // ล้าง username
-        if (username && username.startsWith("@")) {
-          username = username.substring(1);
-        }
-
-        console.log(
-          `✓ ดึงข้อมูลสำเร็จ: @${username} - ${caption.substring(
-            0,
-            50
-          )}... (❤️${likes})`
-        );
-
-        return {
-          username: username || "unknown",
-          caption: caption || "ไม่มี caption",
-          likes: likes || "0",
-          comments: comments || "0",
-          shares: shares || "0",
-          videoUrl: fullVideoUrl,
-        };
-      } catch (err) {
-        console.log(`โหลดวิดีโอล้มเหลว: ${fullVideoUrl}`);
-        console.log("สาเหตุ:", err.message);
-        return null;
-      } finally {
-        if (videoPage && !videoPage.isClosed()) {
-          await videoPage.close();
-        }
+      if (
+        resourceType === "image" ||
+        resourceType === "media" ||
+        resourceType === "font" ||
+        url.includes("ads") ||
+        url.includes("analytics")
+      ) {
+        route.abort();
+      } else {
+        route.continue();
       }
-    })();
+    });
 
-    videoTasks.push(task);
+    this.activeSessions.set(sessionId, { browser, context, page });
+    return { sessionId, page };
   }
 
-  console.log("กำลังดึงข้อมูលจากวิดีโอทั้งหมด...");
-  const videoResults = await Promise.allSettled(videoTasks);
-  const results = [];
-  let idCounter = 1;
-
-  for (const r of videoResults) {
-    if (r.status === "fulfilled" && r.value) {
-      results.push({ id: idCounter++, ...r.value });
+  async closeSession(sessionId) {
+    const session = this.activeSessions.get(sessionId);
+    if (session) {
+      try {
+        await session.browser.close();
+      } catch (error) {
+        console.warn(`Error closing session ${sessionId}:`, error.message);
+      }
+      this.activeSessions.delete(sessionId);
     }
   }
 
-  await context.close();
-  await browser.close();
-
-  console.log(`\n=== ผลลัพธ์การค้นหา TikTok "${keyword}" ===`);
-  results.forEach((result, index) => {
-    console.log(`\n${index + 1}. Username: @${result.username}`);
-    console.log(`   Caption: ${result.caption}`);
-    console.log(
-      `   Likes: ${result.likes} | Comments: ${result.comments} | Shares: ${result.shares}`
+  async closeAllSessions() {
+    const closePromises = Array.from(this.activeSessions.keys()).map(
+      (sessionId) => this.closeSession(sessionId)
     );
-    console.log(`   URL: ${result.videoUrl}`);
-  });
-
-  return results.slice(0, limit);
-}
-
-async function handleSearch(req, res) {
-  const { q, limit } = req.query;
-
-  if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
-
-  try {
-    const numLimit = limit ? parseInt(limit) : 10;
-    console.log(`เริ่มค้นหา TikTok "${q}" จำนวน ${numLimit} วิดีโอ`);
-    const results = await searchTiktok(q, numLimit);
-
-    // แสดงผลลัพธ์ใน response
-    res.json({
-      platform: "TikTok",
-      keyword: q,
-      total: results.length,
-      results: results,
-    });
-  } catch (err) {
-    console.error("TikTok Search error:", err);
-    res.status(500).json({ error: err.message || "TikTok search failed" });
+    await Promise.allSettled(closePromises);
   }
 }
 
+const sessionManager = new BrowserSessionManager();
+
+// TikTok scraper
+class TikTokScraper {
+  constructor() {
+    this.requestCount = 0;
+  }
+
+  async scrapeKeyword(keyword, limit = CONFIG.MAX_RESULTS) {
+    await rateLimiter.acquireToken();
+    let sessionId = null;
+
+    try {
+      console.log(
+        `🔍 [${++this.requestCount}] Searching: "${keyword}" (limit: ${limit})`
+      );
+
+      const session = await sessionManager.createSession();
+      sessionId = session.sessionId;
+      const page = session.page;
+
+      // Navigate to TikTok
+      await page.goto("https://www.tiktok.com", {
+        waitUntil: "domcontentloaded",
+        timeout: CONFIG.TIMEOUT,
+      });
+
+      await sleep(2000);
+      await this.checkForBlocking(page);
+
+      // Perform search
+      const results = await this.performSearch(page, keyword, limit);
+      console.log(`Success: Found ${results.length} results`);
+      return results;
+    } catch (error) {
+      console.error(`Error:`, error.message);
+      throw error;
+    } finally {
+      if (sessionId) {
+        await sessionManager.closeSession(sessionId);
+      }
+    }
+  }
+
+  async performSearch(page, keyword, limit) {
+    try {
+      // Try search functionality
+      await page.waitForSelector(
+        '[data-testid="search-icon"], [aria-label*="Search"]',
+        {
+          timeout: 10000,
+        }
+      );
+
+      await page.click('[data-testid="search-icon"], [aria-label*="Search"]');
+
+      await page.waitForSelector(
+        'input[placeholder*="Search"], [data-testid="search-input"]',
+        {
+          timeout: 5000,
+        }
+      );
+
+      await page.fill(
+        'input[placeholder*="Search"], [data-testid="search-input"]',
+        keyword
+      );
+      await page.keyboard.press("Enter");
+    } catch (error) {
+      // Fallback to direct URL
+      console.log("Using direct URL navigation");
+      const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(
+        keyword
+      )}`;
+      await page.goto(searchUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: CONFIG.TIMEOUT,
+      });
+    }
+
+    await sleep(3000);
+    await this.checkForBlocking(page);
+
+    // Simulate scrolling
+    for (let i = 0; i < CONFIG.SCROLL_TIMES; i++) {
+      await sleep(randomDelay(800, 2000));
+      await page.evaluate(() => {
+        window.scrollBy({ top: Math.random() * 400 + 300, behavior: "smooth" });
+      });
+    }
+
+    return await this.extractVideoData(page, limit);
+  }
+
+  async checkForBlocking(page) {
+    const url = page.url();
+    const title = await page.title().catch(() => "");
+
+    const blockingIndicators = [
+      url.includes("/login"),
+      url.includes("/captcha"),
+      url.includes("/blocked"),
+      title.toLowerCase().includes("blocked"),
+      title.toLowerCase().includes("captcha"),
+    ];
+
+    if (blockingIndicators.some((indicator) => indicator)) {
+      throw new Error("Access blocked or verification required");
+    }
+  }
+
+  async extractVideoData(page, limit) {
+    const extractionStrategies = [
+      this.extractWithMainSelectors.bind(this),
+      this.extractWithFallbackSelectors.bind(this),
+    ];
+
+    for (const strategy of extractionStrategies) {
+      try {
+        const results = await strategy(page, limit);
+        if (results && results.length > 0) {
+          return results.slice(0, limit);
+        }
+      } catch (error) {
+        console.warn("Extraction strategy failed:", error.message);
+        continue;
+      }
+    }
+    return [];
+  }
+
+  async extractWithMainSelectors(page, limit) {
+    return await page.evaluate((maxResults) => {
+      // Function to extract username from URL (inside browser context)
+      function extractUsernameFromUrl(url) {
+        if (!url) return "Unknown user";
+
+        try {
+          // Pattern: https://www.tiktok.com/@username/video/...
+          const match = url.match(/@([^\/]+)/);
+          if (match && match[1]) {
+            return match[1];
+          }
+          return "Unknown user";
+        } catch (error) {
+          return "Unknown user";
+        }
+      }
+
+      const selectors = [
+        '[data-e2e="search-video-item"]',
+        '[data-testid="video-item"]',
+        ".video-feed-item",
+        '[class*="DivItemContainer"]',
+      ];
+
+      let videoElements = [];
+      for (const selector of selectors) {
+        videoElements = Array.from(document.querySelectorAll(selector));
+        if (videoElements.length > 0) break;
+      }
+
+      return videoElements
+        .slice(0, maxResults)
+        .map((element, index) => {
+          try {
+            const linkElement = element.querySelector('a[href*="/video/"]');
+            const videoUrl = linkElement ? linkElement.href : "";
+
+            // Extract username from videoUrl instead of trying to find it separately
+            const username = extractUsernameFromUrl(videoUrl);
+
+            const captionElement = element.querySelector(
+              '[data-testid="caption"], [class*="caption"]'
+            );
+            let caption = "";
+            if (captionElement) {
+              caption = captionElement.textContent?.trim() || "";
+            } else {
+              const textElements = element.querySelectorAll("*");
+              for (const textEl of textElements) {
+                const text = textEl.textContent?.trim() || "";
+                if (
+                  text.length > 10 &&
+                  text.length < 300 &&
+                  !text.startsWith("@")
+                ) {
+                  caption = text;
+                  break;
+                }
+              }
+            }
+
+            return {
+              id: index + 1,
+              caption: caption || "No caption available",
+              username: username,
+              videoUrl: videoUrl,
+            };
+          } catch (error) {
+            return null;
+          }
+        })
+        .filter((item) => item !== null);
+    }, limit);
+  }
+
+  async extractWithFallbackSelectors(page, limit) {
+    return await page.evaluate((maxResults) => {
+      // Function to extract username from URL (inside browser context)
+      function extractUsernameFromUrl(url) {
+        if (!url) return "Unknown user";
+
+        try {
+          // Pattern: https://www.tiktok.com/@username/video/...
+          const match = url.match(/@([^\/]+)/);
+          if (match && match[1]) {
+            return match[1];
+          }
+          return "Unknown user";
+        } catch (error) {
+          return "Unknown user";
+        }
+      }
+
+      const links = Array.from(document.querySelectorAll('a[href*="/video/"]'));
+
+      return links.slice(0, maxResults).map((link, index) => {
+        const container =
+          link.closest("div, article, section") || link.parentElement;
+        const text = container ? container.textContent?.trim() || "" : "";
+
+        // Extract username from the video URL
+        const username = extractUsernameFromUrl(link.href);
+
+        return {
+          id: index + 1,
+          caption:
+            text.length > 10 ? text.substring(0, 200) : "No caption available",
+          username: username,
+          videoUrl: link.href,
+        };
+      });
+    }, limit);
+  }
+}
+
+// Main API handler
+async function handleSearch(req, res) {
+  const keyword = req.query.q?.trim();
+  const limit = parseInt(req.query.limit) || CONFIG.MAX_RESULTS;
+
+  if (!keyword) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing query parameter",
+      message: 'Please provide a search keyword using the "q" parameter',
+    });
+  }
+
+  if (keyword.length < 1 || keyword.length > 100) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid query length",
+      message: "Search keyword must be between 1-100 characters",
+    });
+  }
+
+  if (limit < 1 || limit > 50) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid limit parameter",
+      message: "Limit must be between 1-50",
+    });
+  }
+
+  const scraper = new TikTokScraper();
+
+  try {
+    let lastError;
+    let results = [];
+
+    for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
+      try {
+        results = await scraper.scrapeKeyword(keyword, limit);
+
+        return res.json({
+          success: true,
+          keyword,
+          limit,
+          totalResults: results.length,
+          results,
+        });
+      } catch (error) {
+        lastError = error;
+        console.log(
+          `Attempt ${attempt}/${CONFIG.MAX_RETRIES} failed: ${error.message}`
+        );
+
+        if (attempt < CONFIG.MAX_RETRIES) {
+          const backoffTime = Math.min(1000 * Math.pow(2, attempt), 10000);
+          console.log(`Waiting ${backoffTime}ms before retry...`);
+          await sleep(backoffTime);
+        }
+      }
+    }
+
+    throw lastError || new Error("All retry attempts failed");
+  } catch (error) {
+    let statusCode = 500;
+    let userMessage = "An unexpected error occurred while searching TikTok";
+
+    if (
+      error.message.includes("blocked") ||
+      error.message.includes("Rate limit")
+    ) {
+      statusCode = 429;
+      userMessage = "TikTok is currently blocking requests";
+    } else if (error.message.includes("timeout")) {
+      statusCode = 504;
+      userMessage = "Request timed out";
+    }
+
+    return res.status(statusCode).json({
+      error: error.message,
+    });
+  }
+}
+
+// Graceful shutdown
+async function gracefulShutdown() {
+  console.log("Initiating graceful shutdown...");
+  try {
+    await sessionManager.closeAllSessions();
+    console.log("Graceful shutdown completed");
+    process.exit(0);
+  } catch (error) {
+    console.error("Error during shutdown:", error);
+    process.exit(1);
+  }
+}
+
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
+
 module.exports = {
   handleSearch,
+  CONFIG,
+  sessionManager,
+  utils: { sleep, randomDelay, getRandomElement, extractUsernameFromUrl },
 };
