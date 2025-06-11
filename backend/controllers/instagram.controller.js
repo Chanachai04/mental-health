@@ -62,7 +62,6 @@ async function searchInstagram(keyword, limit = 10) {
   try {
     await page.waitForSelector(postSelector, { timeout: 20000 });
   } catch (err) {
-    await page.screenshot({ path: "ig-debug.png", fullPage: true });
     throw new Error("ไม่สามารถหาโพสต์บนหน้า Instagram ได้");
   }
 

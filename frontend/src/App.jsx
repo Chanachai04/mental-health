@@ -33,7 +33,7 @@ function App() {
       color: "text-pink-500",
     },
     {
-      id: "x",
+      id: "twitter",
       name: "X",
       icon: FaXTwitter,
       color: "text-black",
@@ -158,45 +158,6 @@ function App() {
     return (
       platforms.find((p) => p.id === selectedPlatform)?.name || "เลือกแพลตฟอร์ม"
     );
-  };
-
-  const getPlatformSpecificContent = (item) => {
-    // สำหรับ TikTok อาจมีข้อมูลเพิ่มเติมเช่น music, hashtags, views
-    if (item.platform === "tiktok") {
-      return (
-        <div className="space-y-2">
-          {item.music && (
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <Music className="w-3 h-3" />
-              <span className="truncate">♪ {item.music}</span>
-            </div>
-          )}
-          {item.hashtags && item.hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {item.hashtags.slice(0, 3).map((tag, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center px-2 py-1 bg-pink-50 text-pink-700 rounded-full text-xs"
-                >
-                  #{tag}
-                </span>
-              ))}
-              {item.hashtags.length > 3 && (
-                <span className="text-xs text-gray-500">
-                  +{item.hashtags.length - 3} เพิ่มเติม
-                </span>
-              )}
-            </div>
-          )}
-          {item.views && (
-            <div className="text-xs text-gray-500">
-              👁 {item.views.toLocaleString()} views
-            </div>
-          )}
-        </div>
-      );
-    }
-    return null;
   };
 
   return (
@@ -402,19 +363,11 @@ function App() {
                       className="text-gray-700 leading-relaxed text-sm sm:text-base break-words"
                     />
                   </div>
-
-                  {/* Platform Specific Content */}
-                  {getPlatformSpecificContent(item) && (
-                    <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                      {getPlatformSpecificContent(item)}
-                    </div>
-                  )}
-
                   {/* Result Footer */}
-                  {(item.postUrl || item.contact) && (
+                  {(item.postUrl || item.contact || item.videoUrl) && (
                     <div className="flex justify-end">
                       <a
-                        href={item.postUrl || item.contact}
+                        href={item.postUrl || item.contact || item.videoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 rounded-lg transition-all duration-200 text-xs sm:text-sm font-medium hover:text-blue-700"
