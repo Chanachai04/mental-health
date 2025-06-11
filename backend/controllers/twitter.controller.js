@@ -30,7 +30,9 @@ async function loginAndCacheSession(browser) {
 }
 
 async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({
+    headless: process.env.NODE_ENV === "production",
+  });
 
   // โหลด session จากไฟล์ ถ้ายังไม่มีใน memory
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {

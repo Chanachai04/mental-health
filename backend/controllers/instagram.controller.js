@@ -25,7 +25,10 @@ async function loginAndCacheSession(browser) {
 }
 
 async function searchInstagram(keyword, limit = 10) {
-  const browser = await chromium.launch({ headless: false, slowMo: 100 });
+  const browser = await chromium.launch({
+    headless: process.env.NODE_ENV === "production",
+    slowMo: 100,
+  });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
     cachedStorageState = JSON.parse(
