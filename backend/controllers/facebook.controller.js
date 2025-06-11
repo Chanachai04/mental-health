@@ -25,7 +25,7 @@ async function loginAndCacheSession(browser) {
   await context.close();
 }
 
-async function searchFacebook(keyword, limit = 20) {
+async function searchFacebook(keyword, limit = 10) {
   const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
   });
@@ -48,7 +48,7 @@ async function searchFacebook(keyword, limit = 20) {
 
   const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(
     keyword
-  )}`;
+  )}&filters=eyJycF9hdXRob3I6MCI6IntcIm5hbWVcIjpcIm15X2dyb3Vwc19hbmRfcGFnZXNfcG9zdHNcIixcImFyZ3NcIjpcIlwifSJ9`;
   await page.goto(searchUrl);
 
   await page.waitForSelector('[role="article"]', {
@@ -114,7 +114,7 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = limit ? parseInt(limit) : 20;
+    const numLimit = limit ? parseInt(limit) : 10;
     const results = await searchFacebook(q, numLimit);
     res.json({ results });
   } catch (err) {
