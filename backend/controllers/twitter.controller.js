@@ -1,6 +1,6 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
-const { analyzeSentiment } = require("../utils/sentiment");
+// const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
 
 let cachedStorageState = null;
