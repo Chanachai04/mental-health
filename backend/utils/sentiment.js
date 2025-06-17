@@ -33,14 +33,12 @@ async function analyzeSentiment(message) {
 
     if (!response.ok) throw new Error(`LM Studio error: ${response.status}`);
     const data = await response.json();
-    const raw = data.choices?.[0]?.message?.content?.trim().toLowerCase() || "";
 
-    if (raw.includes("บวก")) return "ความคิดเห็นเชิงบวก";
-    if (raw.includes("ลบ")) return "ความคิดเห็นเชิงลบ";
-    return "ไม่สามารถระบุได้";
+    const result = data.choices?.[0]?.message?.content?.trim();
+    return result || "ไม่สามารถระบุได้";
   } catch (err) {
     console.error("Sentiment error:", err.message);
-    return "ไม่สามารถระบุได้";
+    return { result: null, error: err.message, status: 500 };
   }
 }
 

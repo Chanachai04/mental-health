@@ -1,4 +1,5 @@
 const { chromium } = require("playwright");
+const { analyzeSentiment } = require("../utils/sentiment");
 
 // Simplified configuration
 const CONFIG = {
@@ -6,7 +7,7 @@ const CONFIG = {
   TIMEOUT: 30000,
   SCROLL_TIMES: 2,
   REQUEST_DELAY: { min: 1500, max: 3500 },
-  MAX_RESULTS: 15,
+  MAX_RESULTS: 10,
 };
 
 // User Agent pool
@@ -49,6 +50,36 @@ function extractUsernameFromUrl(url) {
     return "Unknown user";
   } catch (error) {
     return "Unknown user";
+  }
+}
+
+// Function to analyze sentiment for results
+async function analyzeSentimentForResults(results) {
+  try {
+    const analyzedResults = await Promise.all(
+      results.map(async (result) => {
+        try {
+          const sentiment = await analyzeSentiment(result.caption);
+          return {
+            ...result,
+            sentiment: sentiment,
+          };
+        } catch (error) {
+          console.warn(
+            `Failed to analyze sentiment for result ${result.id}:`,
+            error.message
+          );
+        }
+      })
+    );
+    return analyzedResults;
+  } catch (error) {
+    console.error("Error analyzing sentiment for results:", error);
+    // Return original results if sentiment analysis fails
+    return results.map((result) => ({
+      ...result,
+      sentiment: "ความคิดเห็นเป็นกลาง",
+    }));
   }
 }
 
@@ -197,7 +228,7 @@ class TikTokScraper {
 
     try {
       console.log(
-        `🔍 [${++this.requestCount}] Searching: "${keyword}" (limit: ${limit})`
+        `[${++this.requestCount}] Searching: "${keyword}" (limit: ${limit})`
       );
 
       const session = await sessionManager.createSession();
@@ -378,9 +409,9 @@ class TikTokScraper {
 
             return {
               id: index + 1,
-              caption: caption || "No caption available",
               username: username,
-              videoUrl: videoUrl,
+              caption: caption || "No caption available",
+              postUrl: videoUrl,
             };
           } catch (error) {
             return null;
@@ -420,10 +451,10 @@ class TikTokScraper {
 
         return {
           id: index + 1,
+          username: username,
           caption:
             text.length > 10 ? text.substring(0, 200) : "No caption available",
-          username: username,
-          videoUrl: link.href,
+          postUrl: link.href,
         };
       });
     }, limit);
@@ -434,6 +465,7 @@ class TikTokScraper {
 async function handleSearch(req, res) {
   const keyword = req.query.q?.trim();
   const limit = parseInt(req.query.limit) || CONFIG.MAX_RESULTS;
+  const includeSentiment = req.query.sentiment !== "false"; // Default to true, set to false if sentiment=false
 
   if (!keyword) {
     return res.status(400).json({
@@ -469,13 +501,19 @@ async function handleSearch(req, res) {
       try {
         results = await scraper.scrapeKeyword(keyword, limit);
 
-        return res.json({
-          success: true,
+        // Analyze sentiment for results if requested
+        if (includeSentiment && results.length > 0) {
+          console.log("Analyzing sentiment for results...");
+          results = await analyzeSentimentForResults(results);
+        }
+
+        const response = {
           keyword,
-          limit,
-          totalResults: results.length,
+          total: results.length,
           results,
-        });
+        };
+
+        return res.json(response);
       } catch (error) {
         lastError = error;
         console.log(
@@ -532,5 +570,11 @@ module.exports = {
   handleSearch,
   CONFIG,
   sessionManager,
-  utils: { sleep, randomDelay, getRandomElement, extractUsernameFromUrl },
+  utils: {
+    sleep,
+    randomDelay,
+    getRandomElement,
+    extractUsernameFromUrl,
+    analyzeSentimentForResults,
+  },
 };

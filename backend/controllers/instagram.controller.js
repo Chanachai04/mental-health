@@ -1,5 +1,6 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
+const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateInstagram.json";
 
 let cachedStorageState = null;
@@ -77,133 +78,54 @@ async function searchInstagram(keyword, limit = 10) {
       try {
         postPage = await context.newPage();
         await postPage.goto(postUrl, { waitUntil: "load", timeout: 30000 });
-
-        // รอให้หน้าโหลดเสร็จ
         await postPage.waitForTimeout(2000);
 
-        // ลองหา username จาก selector หลายแบบ
+        // ดึง username จาก span ตามคลาสที่ได้รับ
         let username = "unknown";
         try {
-          // ลองหา username จาก selector แรก
-          username = await postPage.$eval("header a", (el) => el.innerText);
-        } catch {
-          try {
-            // ลองหา username จาก selector สำรอง
-            username = await postPage.$eval(
-              "article header a",
-              (el) => el.innerText
-            );
-          } catch {
-            try {
-              // ลองหา username จาก span ที่มี dir="auto"
-              username = await postPage.$eval(
-                'span[dir="auto"]',
-                (el) => el.innerText
-              );
-            } catch {
-              console.log(`ไม่สามารถหา username ได้สำหรับ ${postUrl}`);
-            }
-          }
-        }
-
-        // ลองหา caption จาก selector หลายแบบ
-        let caption = "unknown";
-        try {
-          // ลองหา caption จาก selector แรก
-          caption = await postPage.$eval(
-            "div.C4VMK > span",
-            (el) => el.innerText
+          username = await postPage.$eval(
+            "span._ap3a._aaco._aacw._aacx._aad7._aade",
+            (el) => el.innerText.trim()
           );
         } catch {
-          try {
-            // ลองหา caption จาก meta description
-            caption = await postPage.$eval('meta[name="description"]', (el) =>
-              el.getAttribute("content")
-            );
-            // ตัด username และข้อมูลส่วนเกินออกจาก caption
-            if (caption && caption.includes(" on Instagram: ")) {
-              caption = caption.split(" on Instagram: ")[1];
-              // ตัดส่วน quote marks ออก
-              if (caption.includes('"')) {
-                caption = caption.split('"')[1];
-                // ตัดส่วนท้ายที่เป็น quote mark ออก
-                if (caption.lastIndexOf('"') > 0) {
-                  caption = caption.substring(0, caption.lastIndexOf('"'));
-                }
-              }
-            }
-            // ตัดส่วน likes, comments และ username ที่อยู่หน้า caption ออก
-            if (caption) {
-              // ตัดรูปแบบ "1,052 likes, 264 comments - username on date: "
-              const likesCommentsPattern =
-                /^\d+[,\d]*\s+likes?,\s+\d+[,\d]*\s+comments?\s+-\s+[\w\.]+\s+on\s+[^:]+:\s*/i;
-              caption = caption.replace(likesCommentsPattern, "");
-
-              // ตัดรูปแบบ "username on date: " ที่อาจเหลืออยู่
-              const userDatePattern = /^[\w\.]+\s+on\s+[^:]+:\s*/i;
-              caption = caption.replace(userDatePattern, "");
-            }
-          } catch {
-            try {
-              // ลองหา caption จาก span ใน article
-              const captionElements = await postPage.$$("article span");
-              for (const el of captionElements) {
-                const text = await el.innerText();
-                if (
-                  text &&
-                  text.length > 10 &&
-                  !text.includes("View all") &&
-                  !text.includes("comments")
-                ) {
-                  caption = text;
-                  break;
-                }
-              }
-            } catch {
-              try {
-                // ลองหา caption จาก h1
-                caption = await postPage.$eval(
-                  "article h1",
-                  (el) => el.innerText
-                );
-              } catch {
-                console.log(`ไม่สามารถหา caption ได้สำหรับ ${postUrl}`);
-              }
-            }
-          }
+          // fallback หรือไม่เจอ username
         }
 
-        // ล้างข้อมูลที่ไม่ต้องการ
-        if (caption && caption !== "unknown") {
-          // ตัด likes, comments, username และ date ออกจากหน้า caption
-          const likesCommentsPattern =
-            /^\d+[,\d]*\s+likes?,\s+\d+[,\d]*\s+comments?\s+-\s+[\w\.]+\s+on\s+[^:]+:\s*/i;
-          caption = caption.replace(likesCommentsPattern, "");
-
-          // ตัดรูปแบบ "username on date: " ที่อาจเหลืออยู่
-          const userDatePattern = /^[\w\.]+\s+on\s+[^:]+:\s*/i;
-          caption = caption.replace(userDatePattern, "");
-
-          // ตัด quote marks ที่อาจเหลืออยู่
-          caption = caption.replace(/^"|"$/g, "");
-
-          // ตัด hashtag ออกจากท้ายข้อความ
-          caption = caption.replace(/\s*#[\w\u0E00-\u0E7F]+/g, "").trim();
-
-          // จำกัดความยาว caption
-          if (caption.length > 200) {
-            caption = caption.substring(0, 200) + "...";
-          }
+        // ดึง caption จาก span ตามคลาสที่ได้รับ
+        let caption = "ไม่มี caption";
+        try {
+          caption = await postPage.$eval(
+            "span.x193iq5w.xeuugli.x13faqbe.x1vvkbs.xt0psk2.x1i0vuye.xvs91rp.xo1l8bm.x5n08af.x10wh9bi.xpm28yp.x8viiok.x1o7cslx.x126k92a",
+            (el) => {
+              let text = el.innerText || "";
+              // ตัด hashtag ออก
+              text = text.replace(/#[\w\u0E00-\u0E7F]+/g, "").trim();
+              // ตัดความยาวไม่เกิน 200 ตัวอักษร
+              if (text.length > 200) {
+                text = text.substring(0, 200) + "...";
+              }
+              return text;
+            }
+          );
+        } catch {
+          // fallback หรือไม่เจอ caption
         }
+
+        const sentimentResult = await analyzeSentiment(caption);
+        const sentiment =
+          typeof sentimentResult === "string"
+            ? sentimentResult
+            : sentimentResult.result || "ไม่สามารถระบุได้";
 
         console.log(
-          `✓ ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
+          `ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
         );
 
         return {
           username: username || "unknown",
           caption: caption || "ไม่มี caption",
           postUrl,
+          sentiment,
         };
       } catch (err) {
         console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);

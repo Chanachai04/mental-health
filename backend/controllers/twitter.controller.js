@@ -1,6 +1,7 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
+const { analyzeSentiment } = require("../utils/sentiment");
 
 let cachedStorageState = null;
 
@@ -26,7 +27,6 @@ async function searchTwitter(keyword, limit = 10) {
     slowMo: 100,
   });
 
-  // โหลด session จากไฟล์ ถ้ายังไม่มีใน memory
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
     cachedStorageState = JSON.parse(
       fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
@@ -68,17 +68,23 @@ async function searchTwitter(keyword, limit = 10) {
       const postUrl = await tweet
         .$eval('a[role="link"][href*="/status/"]', (a) => a.href)
         .catch(() => "unknown");
-      // Ai Gemini
-      // const sentiment = await analyzeSentiment(caption);
-      // if (caption !== "unknown") {
-      //     if (!results.some((r) => r.contact === postUrl)) {
-      //         results.push({id: idCounter++, username, caption, sentiment, postUrl});
-      //     }
-      // }
 
-      if (caption !== "unknown") {
-        if (!results.some((r) => r.contact === postUrl)) {
-          results.push({ id: idCounter++, username, caption, postUrl });
+      if (caption !== "unknown" && postUrl !== "unknown") {
+        if (!results.some((r) => r.postUrl === postUrl)) {
+          // เรียกวิเคราะห์ความรู้สึก
+          const sentimentResult = await analyzeSentiment(caption);
+          const sentiment =
+            typeof sentimentResult === "string"
+              ? sentimentResult
+              : sentimentResult.result || "ไม่สามารถระบุได้";
+
+          results.push({
+            id: idCounter++,
+            username,
+            caption,
+            postUrl,
+            sentiment,
+          });
         }
       }
     }
@@ -88,10 +94,9 @@ async function searchTwitter(keyword, limit = 10) {
     await page.waitForTimeout(2000);
 
     const newHeight = await page.evaluate("document.body.scrollHeight");
-    if (newHeight === lastHeight) break; // เลื่อนจนสุดแล้ว
+    if (newHeight === lastHeight) break;
   }
 
-  // เมื่อเสร็จแล้วปิด context
   await context.close();
   await browser.close();
 
@@ -106,6 +111,7 @@ async function handleSearch(req, res) {
   try {
     const numLimit = limit ? parseInt(limit) : 10;
     const results = await searchTwitter(q, numLimit);
+
     res.json({
       keyword: q,
       total: results.length,

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
+const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateFacebook.json";
 
 let cachedStorageState = null;
@@ -31,7 +32,7 @@ async function searchFacebook(keyword, limit = 10) {
     cachedStorageState = JSON.parse(
       fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
     );
-    console.log("โหลด session จากไฟล์ storageStateTwitter.json");
+    console.log("โหลด session จากไฟล์ storageStateFacebook.json");
   }
 
   if (!cachedStorageState) {
@@ -79,7 +80,20 @@ async function searchFacebook(keyword, limit = 10) {
 
       if (caption !== "unknown") {
         if (!results.some((r) => r.postUrl === postUrl)) {
-          results.push({ id: idCounter++, username, caption, postUrl });
+          // เรียกวิเคราะห์ความรู้สึก
+          const sentimentResult = await analyzeSentiment(caption);
+          const sentiment =
+            typeof sentimentResult === "string"
+              ? sentimentResult
+              : sentimentResult.result || "ไม่สามารถระบุได้";
+
+          results.push({
+            id: idCounter++,
+            username,
+            caption,
+            postUrl,
+            sentiment,
+          });
         }
       }
     }
