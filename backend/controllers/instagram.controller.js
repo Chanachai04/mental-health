@@ -13,14 +13,10 @@ async function loginAndCacheSession(browser) {
   console.log("กรุณาล็อกอินใน browser ที่เปิดขึ้นมา...");
 
   await page.waitForURL("https://www.instagram.com/", { timeout: 0 });
-
-  cachedStorageState = await context.storageState();
-  fs.writeFileSync(
-    STORAGE_STATE_PATH,
-    JSON.stringify(cachedStorageState, null, 2)
-  );
-  console.log("บันทึก session ลงไฟล์เรียบร้อยแล้ว");
-
+  const storage = await context.storageState();
+  fs.mkdirSync("./sessions", { recursive: true });
+  fs.writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storage, null, 2));
+  console.log("บันทึก session ลงไฟล์สำเร็จ");
   await context.close();
 }
 
@@ -237,13 +233,6 @@ async function searchInstagram(keyword, limit = 10) {
   await context.close();
   await browser.close();
 
-  console.log(`\n=== ผลลัพธ์การค้นหา "${keyword}" ===`);
-  results.forEach((result, index) => {
-    console.log(`\n${index + 1}. Username: ${result.username}`);
-    console.log(`   Caption: ${result.caption}`);
-    console.log(`   URL: ${result.postUrl}`);
-  });
-
   return results.slice(0, limit);
 }
 
@@ -254,7 +243,6 @@ async function handleSearch(req, res) {
 
   try {
     const numLimit = limit ? parseInt(limit) : 10;
-    console.log(`เริ่มค้นหา "${q}" จำนวน ${numLimit} โพสต์`);
     const results = await searchInstagram(q, numLimit);
 
     // แสดงผลลัพธ์ใน response
@@ -265,7 +253,7 @@ async function handleSearch(req, res) {
     });
   } catch (err) {
     console.error("Search error:", err);
-    res.status(500).json({ error: err.message || "Search failed" });
+    res.status(500).json({ error: "Search failed" });
   }
 }
 

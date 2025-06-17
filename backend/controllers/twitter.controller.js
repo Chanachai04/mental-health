@@ -1,6 +1,5 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
-const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
 
 let cachedStorageState = null;
@@ -10,28 +9,21 @@ async function loginAndCacheSession(browser) {
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto("https://twitter.com/login");
+  await page.goto("https://x.com/i/flow/login");
   console.log("กรุณาล็อกอินใน browser นี้...");
 
-  // รอจนกว่าจะเห็น feed หรือหน้า home ของ Twitter (login สำเร็จ)
-  // await page.waitForSelector('nav[aria-label="Primary"]', { timeout: 0 });
-  await page.waitForURL("https://www.twitter.com/", { timeout: 0 });
-
-  cachedStorageState = await context.storageState();
-
-  fs.writeFileSync(
-    STORAGE_STATE_PATH,
-    JSON.stringify(cachedStorageState, null, 2)
-  );
+  await page.waitForURL("https://x.com/home", { timeout: 0 });
+  const storage = await context.storageState();
+  fs.mkdirSync("./sessions", { recursive: true });
+  fs.writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storage, null, 2));
   console.log("บันทึก session ลงไฟล์สำเร็จ");
-
-  // ไม่ปิด context เพื่อให้ session ค้างไว้ (ตามแต่ถ้าอยากปิดให้แก้)
   await context.close();
 }
 
-async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
+async function searchTwitter(keyword, limit = 10) {
   const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
+    slowMo: 100,
   });
 
   // โหลด session จากไฟล์ ถ้ายังไม่มีใน memory
@@ -50,16 +42,8 @@ async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
     storageState: cachedStorageState,
   });
   const page = await context.newPage();
-
-  // สร้าง query string สำหรับ date filter
-  let query = keyword;
-  if (sinceDate) query += ` since:${sinceDate}`;
-  if (untilDate) query += ` until:${untilDate}`;
-
-  const searchUrl = `https://twitter.com/search?q=${encodeURIComponent(
-    query
-  )}&f=live`;
-  await page.goto(searchUrl);
+  const searchUrl = `https://x.com/search?q=${encodeURIComponent(keyword)}`;
+  await page.goto(searchUrl, { waitUntil: "load" });
 
   await page.waitForSelector('article div[data-testid="tweetText"]', {
     timeout: 10000,
@@ -115,14 +99,18 @@ async function searchTwitter(keyword, limit = 10, sinceDate, untilDate) {
 }
 
 async function handleSearch(req, res) {
-  const { q, limit, since, until } = req.query;
+  const { q, limit } = req.query;
 
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
     const numLimit = limit ? parseInt(limit) : 10;
-    const results = await searchTwitter(q, numLimit, since, until);
-    res.json({ results });
+    const results = await searchTwitter(q, numLimit);
+    res.json({
+      keyword: q,
+      total: results.length,
+      results: results,
+    });
   } catch (err) {
     console.error("Search error:", err);
     res.status(500).json({ error: "Search failed" });

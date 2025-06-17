@@ -1,6 +1,5 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
-// const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateFacebook.json";
 
 let cachedStorageState = null;
@@ -13,28 +12,26 @@ async function loginAndCacheSession(browser) {
   await page.goto("https://www.facebook.com/login");
   console.log("กรุณาล็อกอินใน browser นี้...");
 
-  // รอจนกว่าจะเข้าสู่หน้าแรกของ Facebook (feed)
-  // await page.waitForSelector('[role="feed"]', { timeout: 0 });
   await page.waitForURL("https://www.facebook.com/", { timeout: 0 });
-  cachedStorageState = await context.storageState();
-  fs.writeFileSync(
-    STORAGE_STATE_PATH,
-    JSON.stringify(cachedStorageState, null, 2)
-  );
+  const storage = await context.storageState();
+  fs.mkdirSync("./sessions", { recursive: true });
+  fs.writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storage, null, 2));
   console.log("บันทึก session ลงไฟล์สำเร็จ");
   await context.close();
 }
 
-async function searchFacebook(keyword, limit = 20) {
+async function searchFacebook(keyword, limit = 10) {
   const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
+    slowMo: 100,
   });
 
+  // โหลด session จากไฟล์ ถ้ายังไม่มีใน memory
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
     cachedStorageState = JSON.parse(
       fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
     );
-    console.log("โหลด session จากไฟล์ storageStateFacebook.json");
+    console.log("โหลด session จากไฟล์ storageStateTwitter.json");
   }
 
   if (!cachedStorageState) {
@@ -45,15 +42,12 @@ async function searchFacebook(keyword, limit = 20) {
     storageState: cachedStorageState,
   });
   const page = await context.newPage();
-
   const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(
     keyword
   )}`;
-  await page.goto(searchUrl);
+  await page.goto(searchUrl, { waitUntil: "load" });
 
-  await page.waitForSelector('[role="article"]', {
-    timeout: 10000,
-  });
+  await page.waitForSelector('[role="article"]', { timeout: 10000 });
 
   const results = [];
   let lastHeight = 0;
@@ -75,22 +69,16 @@ async function searchFacebook(keyword, limit = 20) {
         (await post
           .$eval('div[dir="auto"] span', (el) => el.innerText)
           .catch(() => "unknown"));
+
       const caption = await post
         .$eval('div[dir="auto"]', (el) => el.innerText)
         .catch(() => "unknown");
       const postUrl = await post
         .$eval('a[tabindex="0"]', (a) => a.href)
         .catch(() => "unknown");
-      // Ai Gemini
-      // const sentiment = await analyzeSentiment(caption);
-      // if (caption !== "unknown") {
-      //     if (!results.some((r) => r.contact === postUrl)) {
-      //         results.push({id: idCounter++, username, caption, sentiment, postUrl});
-      //     }
-      // }
 
       if (caption !== "unknown") {
-        if (!results.some((r) => r.contact === postUrl)) {
+        if (!results.some((r) => r.postUrl === postUrl)) {
           results.push({ id: idCounter++, username, caption, postUrl });
         }
       }
@@ -103,6 +91,7 @@ async function searchFacebook(keyword, limit = 20) {
     const newHeight = await page.evaluate("document.body.scrollHeight");
     if (newHeight === lastHeight) break;
   }
+
   await context.close();
   await browser.close();
   return results.slice(0, limit);
@@ -114,9 +103,13 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = limit ? parseInt(limit) : 20;
+    const numLimit = limit ? parseInt(limit) : 10;
     const results = await searchFacebook(q, numLimit);
-    res.json({ results });
+    res.json({
+      keyword: q,
+      total: results.length,
+      results: results,
+    });
   } catch (err) {
     console.error("Search error:", err);
     res.status(500).json({ error: "Search failed" });
