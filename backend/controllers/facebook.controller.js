@@ -5,8 +5,12 @@ const STORAGE_STATE_PATH = "./sessions/storageStateFacebook.json";
 
 let cachedStorageState = null;
 
-async function loginAndCacheSession(browser) {
+async function loginAndCacheSession() {
   console.log("เปิด browser เพื่อ login Facebook...");
+  const browser = await chromium.launch({
+    headless: false,
+    slowMo: 100,
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -36,7 +40,8 @@ async function searchFacebook(keyword, limit = 10) {
   }
 
   if (!cachedStorageState) {
-    await loginAndCacheSession(browser);
+    await loginAndCacheSession();
+  } else {
   }
 
   const context = await browser.newContext({

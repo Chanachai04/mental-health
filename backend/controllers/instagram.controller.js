@@ -5,12 +5,16 @@ const STORAGE_STATE_PATH = "./sessions/storageStateInstagram.json";
 
 let cachedStorageState = null;
 
-async function loginAndCacheSession(browser) {
+async function loginAndCacheSession() {
   console.log("เปิด browser เพื่อ login Instagram...");
+  const browser = await chromium.launch({
+    headless: false,
+    slowMo: 100,
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto("https://www.instagram.com/accounts/login/");
+  await page.goto("https://www.instagram.com/?flo=true");
   console.log("กรุณาล็อกอินใน browser ที่เปิดขึ้นมา...");
 
   await page.waitForURL("https://www.instagram.com/", { timeout: 0 });
@@ -35,7 +39,7 @@ async function searchInstagram(keyword, limit = 10) {
   }
 
   if (!cachedStorageState) {
-    await loginAndCacheSession(browser);
+    await loginAndCacheSession();
   }
 
   const context = await browser.newContext({

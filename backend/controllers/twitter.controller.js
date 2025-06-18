@@ -5,8 +5,12 @@ const { analyzeSentiment } = require("../utils/sentiment");
 
 let cachedStorageState = null;
 
-async function loginAndCacheSession(browser) {
+async function loginAndCacheSession() {
   console.log("เปิด browser เพื่อ login Twitter...");
+  const browser = await chromium.launch({
+    headless: false,
+    slowMo: 100,
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -35,7 +39,7 @@ async function searchTwitter(keyword, limit = 10) {
   }
 
   if (!cachedStorageState) {
-    await loginAndCacheSession(browser);
+    await loginAndCacheSession();
   }
 
   const context = await browser.newContext({
