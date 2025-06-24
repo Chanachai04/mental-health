@@ -18,6 +18,7 @@ function App() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [sentimentFilter, setSentimentFilter] = useState("all");
 
   const platforms = [
     {
@@ -32,18 +33,8 @@ function App() {
       icon: FaInstagram,
       color: "text-pink-500",
     },
-    {
-      id: "twitter",
-      name: "X",
-      icon: FaXTwitter,
-      color: "text-black",
-    },
-    {
-      id: "tiktok",
-      name: "TikTok",
-      icon: FaTiktok,
-      color: "text-pink-600",
-    },
+    { id: "twitter", name: "X", icon: FaXTwitter, color: "text-black" },
+    { id: "tiktok", name: "TikTok", icon: FaTiktok, color: "text-pink-600" },
   ];
 
   const handlePlatformChange = (platformId) => {
@@ -56,12 +47,10 @@ function App() {
       alert("กรุณากรอก keyword");
       return;
     }
-
-    if (selectedPlatform.length === 0) {
+    if (!selectedPlatform) {
       alert("กรุณาเลือกแพลตฟอร์ม");
       return;
     }
-
     if (!limit.trim()) {
       alert("กรุณาระบุจำนวนผลลัพธ์");
       return;
@@ -69,7 +58,6 @@ function App() {
 
     setLoading(true);
     try {
-      // ค้นหาจากแพลตฟอร์มที่เลือก
       const res = await fetch(
         `http://localhost:3000/api/${selectedPlatform}/search?q=${encodeURIComponent(
           keyword
@@ -81,10 +69,9 @@ function App() {
         platform: selectedPlatform,
       }));
 
-      // เรียงลำดับผลลัพธ์ตามความเกี่ยวข้อง (ถ้ามี) หรือตามวันที่
-      const sortedResults = results.sort((a, b) => {
-        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      });
+      const sortedResults = results.sort(
+        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      );
 
       setResults(sortedResults);
     } catch (err) {
@@ -112,25 +99,21 @@ function App() {
   const getSentimentColor = (sentiment) => {
     if (!sentiment) return "bg-gray-100 text-gray-600";
     const s = sentiment.toLowerCase();
-    if (s.includes("positive") || s.includes("ดี"))
+    if (["positive", "ดี", "เชิงบวก", "บวก"].some((kw) => s.includes(kw)))
       return "bg-green-100 text-green-700";
-    if (s.includes("negative") || s.includes("แย่"))
+    if (["negative", "แย่", "เชิงลบ", "ลบ"].some((kw) => s.includes(kw)))
       return "bg-red-100 text-red-700";
     return "bg-blue-100 text-blue-700";
   };
 
   const highlightKeyword = (text, searchKeyword) => {
-    if (!text || !searchKeyword.trim()) {
-      return text;
-    }
-
+    if (!text || !searchKeyword.trim()) return text;
     const keywords = searchKeyword.trim().split(/\s+/);
     let highlightedText = text;
-
     keywords.forEach((keyword) => {
       if (keyword.length > 0) {
         const regex = new RegExp(
-          `(${keyword.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")})`,
+          `(${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
           "gi"
         );
         highlightedText = highlightedText.replace(
@@ -139,13 +122,11 @@ function App() {
         );
       }
     });
-
     return highlightedText;
   };
 
   const HighlightedText = ({ text, searchKeyword, className = "" }) => {
     const highlightedHTML = highlightKeyword(text, searchKeyword);
-
     return (
       <div
         className={className}
@@ -154,11 +135,8 @@ function App() {
     );
   };
 
-  const getSelectedPlatformName = () => {
-    return (
-      platforms.find((p) => p.id === selectedPlatform)?.name || "เลือกแพลตฟอร์ม"
-    );
-  };
+  const getSelectedPlatformName = () =>
+    platforms.find((p) => p.id === selectedPlatform)?.name || "เลือกแพลตฟอร์ม";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -324,74 +302,129 @@ function App() {
               )}
             </div>
 
+            {/* Sentiment Filter Buttons */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              {[
+                { label: "ทั้งหมด", value: "all" },
+                { label: "ความคิดเชิงบวก", value: "positive" },
+                { label: "ความคิดเชิงลบ", value: "negative" },
+              ].map(({ label, value }) => (
+                <button
+                  key={value}
+                  onClick={() => setSentimentFilter(value)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium border ${
+                    sentimentFilter === value
+                      ? value === "positive"
+                        ? "bg-green-100 text-green-700 border-green-300"
+                        : value === "negative"
+                        ? "bg-red-100 text-red-700 border-red-300"
+                        : "bg-blue-100 text-blue-700 border-blue-300"
+                      : "bg-white text-gray-600 border-gray-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {/* Results Grid */}
             <div className="grid gap-3 sm:gap-4">
-              {results.map((item, index) => (
-                <div
-                  key={`${item.platform}-${item.id || index}`}
-                  className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 hover:shadow-lg transition-all duration-200 hover:border-blue-200"
-                >
-                  {/* Result Header */}
-                  <div className="flex items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-transparent rounded-full flex items-center justify-center flex-shrink-0">
-                        <img
-                          src="https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png"
-                          alt="userimg"
-                          className="w-full h-full object-cover rounded-full"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm sm:text-base truncate">
-                          <span className="truncate">
-                            {item.username || "Unknown User"}
-                          </span>
-                          {getPlatformIcon(item.platform)}
-                        </h3>
-                        <div className="text-xs text-gray-500 capitalize">
-                          {item.platform}
+              {results
+                .filter((item) => {
+                  if (sentimentFilter === "all") return true;
+                  const s = (item.sentiment || "").toLowerCase();
+
+                  const positiveKeywords = [
+                    "positive",
+                    "ดี",
+                    "เชิงบวก",
+                    "บวก",
+                    "happy",
+                    "joy",
+                    "love",
+                  ];
+                  const negativeKeywords = [
+                    "negative",
+                    "แย่",
+                    "เชิงลบ",
+                    "ลบ",
+                    "sad",
+                    "angry",
+                    "hate",
+                  ];
+
+                  if (sentimentFilter === "positive")
+                    return positiveKeywords.some((kw) => s.includes(kw));
+                  if (sentimentFilter === "negative")
+                    return negativeKeywords.some((kw) => s.includes(kw));
+                  return true;
+                })
+                .map((item, index) => (
+                  <div
+                    key={`${item.platform}-${item.id || index}`}
+                    className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 hover:shadow-lg transition-all duration-200 hover:border-blue-200"
+                  >
+                    {/* Result Header */}
+                    <div className="flex items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-transparent rounded-full flex items-center justify-center flex-shrink-0">
+                          <img
+                            src="https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png"
+                            alt="userimg"
+                            className="w-full h-full object-cover rounded-full"
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm sm:text-base truncate">
+                            <span className="truncate">
+                              {item.username || "Unknown User"}
+                            </span>
+                            {getPlatformIcon(item.platform)}
+                          </h3>
+                          <div className="text-xs text-gray-500 capitalize">
+                            {item.platform}
+                          </div>
                         </div>
                       </div>
+
+                      {item.sentiment && (
+                        <span
+                          className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getSentimentColor(
+                            item.sentiment
+                          )}`}
+                        >
+                          <span className="hidden sm:inline">AI: </span>
+                          {item.sentiment}
+                        </span>
+                      )}
                     </div>
 
-                    {item.sentiment && (
-                      <span
-                        className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getSentimentColor(
-                          item.sentiment
-                        )}`}
-                      >
-                        <span className="hidden sm:inline">AI: </span>
-                        {item.sentiment}
-                      </span>
+                    {/* Result Content */}
+                    <div className="mb-4">
+                      <HighlightedText
+                        text={item.caption || item.info || "ไม่มีข้อความ"}
+                        searchKeyword={keyword}
+                        className="text-gray-700 leading-relaxed text-sm sm:text-base break-words"
+                      />
+                    </div>
+                    {/* Result Footer */}
+                    {(item.postUrl || item.contact || item.videoUrl) && (
+                      <div className="flex justify-end">
+                        <a
+                          href={item.postUrl || item.contact || item.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 rounded-lg transition-all duration-200 text-xs sm:text-sm font-medium hover:text-blue-700"
+                        >
+                          <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
+                          {item.platform === "tiktok"
+                            ? "เปิดวิดีโอ"
+                            : "เปิดโพสต์"}
+                        </a>
+                      </div>
                     )}
                   </div>
-
-                  {/* Result Content */}
-                  <div className="mb-4">
-                    <HighlightedText
-                      text={item.caption || item.info || "ไม่มีข้อความ"}
-                      searchKeyword={keyword}
-                      className="text-gray-700 leading-relaxed text-sm sm:text-base break-words"
-                    />
-                  </div>
-                  {/* Result Footer */}
-                  {(item.postUrl || item.contact || item.videoUrl) && (
-                    <div className="flex justify-end">
-                      <a
-                        href={item.postUrl || item.contact || item.videoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 rounded-lg transition-all duration-200 text-xs sm:text-sm font-medium hover:text-blue-700"
-                      >
-                        <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
-                        {item.platform === "tiktok"
-                          ? "เปิดวิดีโอ"
-                          : "เปิดโพสต์"}
-                      </a>
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         )}
