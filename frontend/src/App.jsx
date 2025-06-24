@@ -165,14 +165,21 @@ function App() {
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 max-w-7xl">
         {/* Header Section */}
         <div className="text-center mb-6 sm:mb-8 lg:mb-12">
-          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-3 sm:mb-4">
-            <Search className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-24 h-24 sm:w-48 sm:h-48 bg-transparent rounded-full mb-3 sm:mb-4">
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/4/45/Mahidol_U.png"
+              alt="MU Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            Social Search
+          <br />
+          <br />
+          <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-clip-text text mb-4">
+            Mahidol University
           </h1>
-          <p className="text-gray-600 text-sm sm:text-base lg:text-lg px-4">
-            ค้นหาโพสต์จาก Social Media ได้อย่างง่ายดาย
+          <p className="text-gray-550 text-sm sm:text-base lg:text-xl px-4">
+            Application of Natural Language Processing to Study the Impact of
+            Social Media on Mental Health in Children and Adolescents
           </p>
         </div>
 
@@ -183,7 +190,7 @@ function App() {
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Hash className="w-4 h-4" />
-                คำค้นหา (Keyword)
+                คำค้นหา (Keywords)
               </label>
               <div className="relative">
                 <input
@@ -202,7 +209,7 @@ function App() {
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Users className="w-4 h-4" />
-                จำนวนผลลัพธ์ (ต่อแพลตฟอร์ม)
+                จำนวนผลลัพธ์ (Amount of Results)
               </label>
               <input
                 type="number"
@@ -217,7 +224,7 @@ function App() {
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
-                แพลตฟอร์ม
+                แพลตฟอร์ม (Platform)
               </label>
               <div className="relative">
                 <button
@@ -264,7 +271,7 @@ function App() {
               </div>
               {selectedPlatform && (
                 <div className="text-xs text-gray-500 mt-2">
-                  เลือกแล้ว: {getSelectedPlatformName()}
+                  Chosen: {getSelectedPlatformName()}
                 </div>
               )}
             </div>
@@ -273,7 +280,7 @@ function App() {
             <button
               onClick={handleSearch}
               disabled={loading || !keyword.trim() || !selectedPlatform}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-sm sm:text-base"
+              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-sm sm:text-base"
             >
               {loading ? (
                 <>
@@ -327,8 +334,12 @@ function App() {
                   {/* Result Header */}
                   <div className="flex items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
-                        {(item.username || "U").charAt(0).toUpperCase()}
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-transparent rounded-full flex items-center justify-center flex-shrink-0">
+                        <img
+                          src="https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png"
+                          alt="userimg"
+                          className="w-full h-full object-cover rounded-full"
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm sm:text-base truncate">

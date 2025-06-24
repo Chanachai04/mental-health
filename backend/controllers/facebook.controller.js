@@ -86,12 +86,7 @@ async function searchFacebook(keyword, limit = 10) {
       if (caption !== "unknown") {
         if (!results.some((r) => r.postUrl === postUrl)) {
           // เรียกวิเคราะห์ความรู้สึก
-          const sentimentResult = await analyzeSentiment(caption);
-          const sentiment =
-            typeof sentimentResult === "string"
-              ? sentimentResult
-              : sentimentResult.result || "ไม่สามารถระบุได้";
-
+          const sentiment = await analyzeSentiment(caption);
           results.push({
             id: idCounter++,
             username,
