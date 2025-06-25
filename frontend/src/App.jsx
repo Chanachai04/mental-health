@@ -14,13 +14,14 @@ import { LuFacebook } from "react-icons/lu";
 function App() {
   const [keyword, setKeyword] = useState("");
   const [limit, setLimit] = useState("10");
-  const [selectedPlatform, setSelectedPlatform] = useState("facebook");
+  const [selectedPlatform, setSelectedPlatform] = useState("twitter");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [sentimentFilter, setSentimentFilter] = useState("all");
 
   const platforms = [
+    { id: "twitter", name: "X", icon: FaXTwitter, color: "text-black" },
     {
       id: "facebook",
       name: "Facebook",
@@ -33,7 +34,7 @@ function App() {
       icon: FaInstagram,
       color: "text-pink-500",
     },
-    { id: "twitter", name: "X", icon: FaXTwitter, color: "text-black" },
+
     { id: "tiktok", name: "TikTok", icon: FaTiktok, color: "text-pink-600" },
   ];
 
@@ -212,9 +213,8 @@ function App() {
                 >
                   <span className="truncate">{getSelectedPlatformName()}</span>
                   <ChevronDown
-                    className={`w-4 h-4 transition-transform duration-200 ${
-                      dropdownOpen ? "rotate-180" : ""
-                    }`}
+                    className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""
+                      }`}
                   />
                 </button>
 
@@ -227,17 +227,15 @@ function App() {
                         <div
                           key={platform.id}
                           onClick={() => handlePlatformChange(platform.id)}
-                          className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl ${
-                            isSelected ? "bg-blue-50" : ""
-                          }`}
+                          className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl ${isSelected ? "bg-blue-50" : ""
+                            }`}
                         >
                           <IconComponent
                             className={`w-5 h-5 ${platform.color}`}
                           />
                           <span
-                            className={`font-medium text-sm sm:text-base ${
-                              isSelected ? "text-blue-700" : "text-gray-700"
-                            }`}
+                            className={`font-medium text-sm sm:text-base ${isSelected ? "text-blue-700" : "text-gray-700"
+                              }`}
                           >
                             {platform.name}
                           </span>
@@ -312,15 +310,14 @@ function App() {
                 <button
                   key={value}
                   onClick={() => setSentimentFilter(value)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium border ${
-                    sentimentFilter === value
-                      ? value === "positive"
-                        ? "bg-green-100 text-green-700 border-green-300"
-                        : value === "negative"
+                  className={`px-3 py-1 rounded-full text-sm font-medium border ${sentimentFilter === value
+                    ? value === "positive"
+                      ? "bg-green-100 text-green-700 border-green-300"
+                      : value === "negative"
                         ? "bg-red-100 text-red-700 border-red-300"
                         : "bg-blue-100 text-blue-700 border-blue-300"
-                      : "bg-white text-gray-600 border-gray-300"
-                  }`}
+                    : "bg-white text-gray-600 border-gray-300"
+                    }`}
                 >
                   {label}
                 </button>
