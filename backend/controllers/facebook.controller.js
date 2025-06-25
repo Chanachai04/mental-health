@@ -17,12 +17,23 @@ async function loginAndCacheSession() {
   await page.goto("https://www.facebook.com/login");
   console.log("กรุณาล็อกอินใน browser นี้...");
 
-  await page.waitForURL("https://www.facebook.com/", { timeout: 0 });
+  // ✅ รอให้เปลี่ยนหน้าไปยัง URL ใดก็ได้ที่ไม่ใช่หน้าล็อกอิน
+  await page.waitForNavigation({
+    timeout: 0,
+    waitUntil: "domcontentloaded",
+    url: (url) =>
+      url.hostname.includes("facebook.com") &&
+      !url.pathname.includes("login"),
+  });
+
+  // ✅ เมื่อเข้าสู่ระบบแล้ว ให้บันทึก session
   const storage = await context.storageState();
   fs.mkdirSync("./sessions", { recursive: true });
   fs.writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storage, null, 2));
   console.log("บันทึก session ลงไฟล์สำเร็จ");
+
   await context.close();
+  await browser.close();
 }
 
 async function searchFacebook(keyword, limit = 10) {
@@ -41,7 +52,6 @@ async function searchFacebook(keyword, limit = 10) {
 
   if (!cachedStorageState) {
     await loginAndCacheSession();
-  } else {
   }
 
   const context = await browser.newContext({

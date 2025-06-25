@@ -176,7 +176,7 @@ function App() {
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="เช่น car, ขายของ, รีวิวสินค้า, #trending..."
+                  placeholder="ป้อนคำที่ต้องการค้นหา..."
                   className="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 placeholder-gray-400 text-sm sm:text-base"
                 />
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
