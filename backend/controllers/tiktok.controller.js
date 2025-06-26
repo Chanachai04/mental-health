@@ -6,7 +6,6 @@ const CONFIG = {
   TIMEOUT: 30000,
   SCROLL_TIMES: 2,
   REQUEST_DELAY: { min: 1500, max: 3500 },
-  MAX_RESULTS: process.config.LIMIT,
 };
 
 // User Agent pool
@@ -144,7 +143,7 @@ class BrowserSessionManager {
     const viewport = getRandomElement(VIEWPORTS);
 
     const browser = await chromium.launch({
-      headless: process.env.NODE_ENV === "production",
+      headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -498,10 +497,7 @@ async function handleSearch(req, res) {
 
     for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
       try {
-        results = await scraper.scrapeKeyword(
-          keyword,
-          requestedLimit || MAX_RESULTS
-        );
+        results = await scraper.scrapeKeyword(keyword, requestedLimit);
 
         if (includeSentiment && results.length > 0) {
           console.log("Analyzing sentiment for results...");

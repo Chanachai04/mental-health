@@ -27,7 +27,7 @@ async function loginAndCacheSession() {
 
 async function searchTwitter(keyword, limit) {
   const browser = await chromium.launch({
-    headless: process.env.NODE_ENV === "production",
+    headless: true,
     slowMo: 100,
   });
 
@@ -110,8 +110,7 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = process.config.LIMIT;
-    const results = await searchTwitter(q, limit || numLimit);
+    const results = await searchTwitter(q, limit);
 
     res.json({
       keyword: q,
