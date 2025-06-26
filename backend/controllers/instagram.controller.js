@@ -25,7 +25,7 @@ async function loginAndCacheSession() {
   await context.close();
 }
 
-async function searchInstagram(keyword, limit = 10) {
+async function searchInstagram(keyword, limit = 2) {
   const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
     slowMo: 100,
@@ -52,7 +52,6 @@ async function searchInstagram(keyword, limit = 10) {
   )}/`;
   await page.goto(searchUrl, { waitUntil: "load" });
 
-  // เพิ่ม scroll เพื่อโหลดโพสต์เพิ่มเติม
   for (let i = 0; i < 3; i++) {
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
     await page.waitForTimeout(2000);
@@ -84,36 +83,28 @@ async function searchInstagram(keyword, limit = 10) {
         await postPage.goto(postUrl, { waitUntil: "load", timeout: 30000 });
         await postPage.waitForTimeout(2000);
 
-        // ดึง username จาก span ตามคลาสที่ได้รับ
         let username = "unknown";
         try {
           username = await postPage.$eval(
             "span._ap3a._aaco._aacw._aacx._aad7._aade",
             (el) => el.innerText.trim()
           );
-        } catch {
-          // fallback หรือไม่เจอ username
-        }
+        } catch {}
 
-        // ดึง caption จาก span ตามคลาสที่ได้รับ
         let caption = "ไม่มี caption";
         try {
           caption = await postPage.$eval(
             "span.x193iq5w.xeuugli.x13faqbe.x1vvkbs.xt0psk2.x1i0vuye.xvs91rp.xo1l8bm.x5n08af.x10wh9bi.xpm28yp.x8viiok.x1o7cslx.x126k92a",
             (el) => {
               let text = el.innerText || "";
-              // ตัด hashtag ออก
               text = text.replace(/#[\w\u0E00-\u0E7F]+/g, "").trim();
-              // ตัดความยาวไม่เกิน 200 ตัวอักษร
               if (text.length > 200) {
                 text = text.substring(0, 200) + "...";
               }
               return text;
             }
           );
-        } catch {
-          // fallback หรือไม่เจอ caption
-        }
+        } catch {}
 
         const sentimentResult = await analyzeSentiment(caption);
         const sentiment =
@@ -145,14 +136,13 @@ async function searchInstagram(keyword, limit = 10) {
     postTasks.push(task);
   }
 
-  console.log("กำลังดึงข้อมูลจากโพสต์ทั้งหมด...");
+  console.log("กำลังดึงข้อมูลจากInstagram...");
   const postResults = await Promise.allSettled(postTasks);
   const results = [];
-  let idCounter = 1;
 
   for (const r of postResults) {
     if (r.status === "fulfilled" && r.value) {
-      results.push({ id: idCounter++, ...r.value });
+      results.push({ ...r.value });
     }
   }
 
@@ -168,10 +158,9 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = limit ? parseInt(limit) : 10;
-    const results = await searchInstagram(q, numLimit);
+    const numLimit = process.config.LIMIT;
+    const results = await searchInstagram(q, limit || numLimit);
 
-    // แสดงผลลัพธ์ใน response
     res.json({
       keyword: q,
       total: results.length,

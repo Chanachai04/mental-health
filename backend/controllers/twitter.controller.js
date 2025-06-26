@@ -25,7 +25,7 @@ async function loginAndCacheSession() {
   await context.close();
 }
 
-async function searchTwitter(keyword, limit = 10) {
+async function searchTwitter(keyword, limit) {
   const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
     slowMo: 100,
@@ -55,7 +55,6 @@ async function searchTwitter(keyword, limit = 10) {
 
   const results = [];
   let lastHeight = 0;
-  let idCounter = 1;
 
   while (results.length < limit) {
     const tweets = await page.$$("article");
@@ -75,7 +74,6 @@ async function searchTwitter(keyword, limit = 10) {
 
       if (caption !== "unknown" && postUrl !== "unknown") {
         if (!results.some((r) => r.postUrl === postUrl)) {
-          // เรียกวิเคราะห์ความรู้สึก
           const sentimentResult = await analyzeSentiment(caption);
           const sentiment =
             typeof sentimentResult === "string"
@@ -83,7 +81,6 @@ async function searchTwitter(keyword, limit = 10) {
               : sentimentResult.result || "ไม่สามารถระบุได้";
 
           results.push({
-            id: idCounter++,
             username,
             caption,
             postUrl,
@@ -113,8 +110,8 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = limit ? parseInt(limit) : 10;
-    const results = await searchTwitter(q, numLimit);
+    const numLimit = process.config.LIMIT;
+    const results = await searchTwitter(q, limit || numLimit);
 
     res.json({
       keyword: q,

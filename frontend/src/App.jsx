@@ -1,458 +1,394 @@
-import { useState } from "react";
-import {
-  Search,
-  Users,
-  MessageCircle,
-  Hash,
-  ExternalLink,
-  Loader2,
-  ChevronDown,
-} from "lucide-react";
-import { FaXTwitter, FaInstagram, FaTiktok } from "react-icons/fa6";
-import { LuFacebook } from "react-icons/lu";
+import { useState, useRef, useEffect } from "react";
+import { Search, Hash, Loader2 } from "lucide-react";
 
 function App() {
   const [keyword, setKeyword] = useState("");
-  const [limit, setLimit] = useState("10");
-  const [selectedPlatform, setSelectedPlatform] = useState("twitter");
-  const [results, setResults] = useState([]);
+  // intervalMin now controls the frequency of search (every X minutes)
+  const [intervalMin, setIntervalMin] = useState(5);
   const [loading, setLoading] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [sentimentFilter, setSentimentFilter] = useState("all");
+  const [isSearching, setIsSearching] = useState(false);
+  const [allResults, setAllResults] = useState([]);
+  const [message, setMessage] = useState({ text: "", type: "" }); // State for displaying messages
+  const baseSearchAmount = 45;
+  const [searchLimit, setSearchLimit] = useState(baseSearchAmount); // New state for increasing search limit
 
-  const platforms = [
-    { id: "twitter", name: "X", icon: FaXTwitter, color: "text-black" },
-    {
-      id: "facebook",
-      name: "Facebook",
-      icon: LuFacebook,
-      color: "text-blue-600",
-    },
-    {
-      id: "instagram",
-      name: "Instagram",
-      icon: FaInstagram,
-      color: "text-pink-500",
-    },
+  const allResultsRef = useRef([]); // Ref to hold all results for the current session
+  const uniquePostIdsRef = useRef(new Set()); // Ref to store unique identifiers (e.g., platform-url)
+  const intervalIdRef = useRef(null); // Ref to hold the interval ID for clearing
+  const messageTimeoutRef = useRef(null); // Ref to clear message timeout
 
-    { id: "tiktok", name: "TikTok", icon: FaTiktok, color: "text-pink-600" },
-  ];
+  const platforms = ["facebook", "instagram", "twitter", "tiktok"];
 
-  const handlePlatformChange = (platformId) => {
-    setSelectedPlatform(platformId);
-    setDropdownOpen(false);
+  // Helper function to display messages in the UI
+  const displayMessage = (text, type = "info") => {
+    setMessage({ text, type });
+    // Clear any existing message timeout
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
+    }
+    // Set a new timeout to clear the message after 5 seconds
+    messageTimeoutRef.current = setTimeout(() => {
+      setMessage({ text: "", type: "" });
+    }, 5000);
   };
 
-  const handleSearch = async () => {
-    if (!keyword.trim()) {
-      alert("กรุณากรอก keyword");
-      return;
-    }
-    if (!selectedPlatform) {
-      alert("กรุณาเลือกแพลตฟอร์ม");
-      return;
-    }
-    if (!limit.trim()) {
-      alert("กรุณาระบุจำนวนผลลัพธ์");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `http://localhost:3000/api/${selectedPlatform}/search?q=${encodeURIComponent(
-          keyword
-        )}&limit=${Number(limit || 10)}`
-      );
-      const data = await res.json();
-      const results = (data.results || []).map((result) => ({
-        ...result,
-        platform: selectedPlatform,
-      }));
-
-      const sortedResults = results.sort(
-        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-      );
-
-      setResults(sortedResults);
-    } catch (err) {
-      console.error("Error:", err);
-      alert("ค้นหาไม่สำเร็จ");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter") {
-      handleSearch();
-    }
-  };
-
-  const getPlatformIcon = (platform, className = "w-4 h-4") => {
-    const platformData = platforms.find((p) => p.id === platform);
-    if (!platformData) return null;
-
-    const IconComponent = platformData.icon;
-    return <IconComponent className={`${className} ${platformData.color}`} />;
-  };
-
-  const getSentimentColor = (sentiment) => {
-    if (!sentiment) return "bg-gray-100 text-gray-600";
-    const s = sentiment.toLowerCase();
-    if (["positive", "ดี", "เชิงบวก", "บวก"].some((kw) => s.includes(kw)))
-      return "bg-green-100 text-green-700";
-    if (["negative", "แย่", "เชิงลบ", "ลบ"].some((kw) => s.includes(kw)))
-      return "bg-red-100 text-red-700";
-    return "bg-blue-100 text-blue-700";
-  };
-
-  const highlightKeyword = (text, searchKeyword) => {
-    if (!text || !searchKeyword.trim()) return text;
-    const keywords = searchKeyword.trim().split(/\s+/);
-    let highlightedText = text;
-    keywords.forEach((keyword) => {
-      if (keyword.length > 0) {
-        const regex = new RegExp(
-          `(${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-          "gi"
-        );
-        highlightedText = highlightedText.replace(
-          regex,
-          '<mark class="bg-yellow-200 px-1 py-0.5 rounded font-medium text-yellow-900">$1</mark>'
-        );
+  // Effect to clear message timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (messageTimeoutRef.current) {
+        clearTimeout(messageTimeoutRef.current);
       }
-    });
-    return highlightedText;
+    };
+  }, []);
+
+  /**
+   * Generates a unique ID for a post.
+   * Prioritizes baseurl for uniqueness, falls back to a combination of platform, username, and caption.
+   * @param {Object} post - The post object.
+   * @returns {string} A unique identifier string for the post.
+   */
+  const getUniquePostId = (post) => {
+    // If baseurl exists, it's the most reliable unique identifier.
+    if (post.baseurl) {
+      return `${post.platform}-${post.baseurl}`;
+    }
+    // Fallback for posts without a reliable URL: combine platform, username, and caption.
+    // This is less robust but better than nothing for uniqueness.
+    return `${post.platform}-${post.username}-${post.caption}`;
   };
 
-  const HighlightedText = ({ text, searchKeyword, className = "" }) => {
-    const highlightedHTML = highlightKeyword(text, searchKeyword);
-    return (
-      <div
-        className={className}
-        dangerouslySetInnerHTML={{ __html: highlightedHTML }}
-      />
-    );
+  /**
+   * Starts the continuous search process.
+   * Calls doSearch immediately and then sets up an interval for repeated searches.
+   */
+  const startSearch = () => {
+    if (!keyword.trim()) {
+      displayMessage("Please enter a search keyword.", "error");
+      return;
+    }
+
+    // Reset uniquePostIds for a new search session
+    uniquePostIdsRef.current.clear();
+    setAllResults([]); // Clear previous results display
+    allResultsRef.current = []; // Clear previous results in ref
+    setSearchLimit(baseSearchAmount); // Reset search limit when starting a new search
+
+    setIsSearching(true);
+    displayMessage("Starting search...", "info");
+    doSearch(); // Perform an initial search immediately
+
+    // Set up an interval to perform the search every 'intervalMin' minutes
+    // The search will continue until explicitly stopped by the user.
+    intervalIdRef.current = setInterval(doSearch, intervalMin * 60 * 1000);
   };
 
-  const getSelectedPlatformName = () =>
-    platforms.find((p) => p.id === selectedPlatform)?.name || "เลือกแพลตฟอร์ม";
+  /**
+   * Stops the continuous search process.
+   * Clears the interval and attempts to save collected unique data.
+   */
+  const stopSearch = async () => {
+    setIsSearching(false);
+    displayMessage("Stopping search...", "info");
+
+    // Clear the interval if it's running
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = null;
+    }
+
+    // Give a brief moment for any ongoing fetches/saves to potentially finish
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Data has been saved incrementally by doSearch.
+    // Just clear the states for the next session.
+    if (allResultsRef.current.length > 0) {
+      displayMessage(
+        `Search stopped. ${allResultsRef.current.length} unique items were collected and saved during this session.`,
+        "success"
+      );
+    } else {
+      displayMessage(
+        "Search stopped. No new unique data was found or saved during this session.",
+        "info"
+      );
+    }
+    setAllResults([]); // Clear displayed results
+    allResultsRef.current = []; // Clear ref for next session
+    uniquePostIdsRef.current.clear(); // Clear unique IDs for next session
+  };
+
+  /**
+   * Performs the actual search operation across all defined platforms.
+   * Fetches data, filters for uniqueness, and updates the results state.
+   * Posts are saved to the API as soon as they are found to be unique.
+   */
+  const doSearch = async () => {
+    if (!keyword.trim()) {
+      displayMessage("Search keyword is empty. Stopping search.", "error");
+      stopSearch();
+      return;
+    }
+
+    setLoading(true); // Indicate loading state for the search operation
+    let newlyFoundUniqueResults = [];
+
+    try {
+      const fetchPromises = platforms.map(async (platform) => {
+        // Fetch data from each platform's API endpoint
+        const res = await fetch(
+          `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(
+            keyword
+          )}&limit=${searchLimit}` // Use the increasing searchLimit
+        );
+        const data = await res.json();
+
+        // Map the received data to a consistent structure
+        const results = (data.results || []).map((r) => ({
+          username: r.username || "anonymous",
+          caption: r.caption || "",
+          platform,
+          baseurl: r.postUrl || r.videoUrl || "",
+        }));
+
+        return results;
+      });
+
+      // Wait for all platform fetches to complete
+      const allPlatformResults = await Promise.all(fetchPromises);
+      // Flatten the array of arrays into a single array of results
+      const mergedResults = allPlatformResults.flat();
+
+      // Filter for unique results before adding to state and ref
+      mergedResults.forEach((result) => {
+        const uniqueId = getUniquePostId(result);
+        if (!uniquePostIdsRef.current.has(uniqueId)) {
+          uniquePostIdsRef.current.add(uniqueId);
+          newlyFoundUniqueResults.push(result);
+        }
+      });
+
+      // Only update and save if new unique results were found
+      if (newlyFoundUniqueResults.length > 0) {
+        setAllResults((prev) => [...prev, ...newlyFoundUniqueResults]);
+        allResultsRef.current = [
+          ...allResultsRef.current,
+          ...newlyFoundUniqueResults,
+        ];
+
+        let savedNewlyFoundCount = 0;
+        for (const result of newlyFoundUniqueResults) {
+          try {
+            // Attempt to save each newly found unique post immediately
+            const response = await fetch("http://localhost:3000/api/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(result),
+            });
+
+            if (response.ok) {
+              savedNewlyFoundCount++;
+            } else {
+              console.error(
+                "Failed to save newly found post:",
+                await response.text()
+              );
+            }
+          } catch (saveError) {
+            console.error("Error saving newly found post:", saveError);
+          }
+        }
+        displayMessage(
+          `Found ${newlyFoundUniqueResults.length} new unique posts and saved ${savedNewlyFoundCount}. Total unique posts this session: ${allResultsRef.current.length}`,
+          "success"
+        );
+      } else {
+        displayMessage("No new unique posts found in this interval.", "info");
+      }
+    } catch (err) {
+      console.error("Search error:", err);
+      displayMessage("Error during search: " + err.message, "error");
+      // Consider stopping search if a critical error occurs consistently
+      // stopSearch();
+    } finally {
+      setLoading(false); // End loading state
+      // Increment the search limit for the next loop
+      setSearchLimit((prevLimit) => prevLimit + prevLimit);
+    }
+  };
+
+  /**
+   * Handles the click event on the main search/stop button.
+   * Toggles between starting and stopping the search.
+   */
+  const handleSearchClick = () => {
+    if (isSearching) {
+      stopSearch();
+    } else {
+      startSearch();
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 max-w-7xl">
-        {/* Header Section */}
-        <div className="text-center mb-6 sm:mb-8 lg:mb-12">
-          <div className="inline-flex items-center justify-center w-24 h-24 sm:w-48 sm:h-48 bg-transparent rounded-full mb-3 sm:mb-4">
-            <img
-              src="https://upload.wikimedia.org/wikipedia/commons/4/45/Mahidol_U.png"
-              alt="MU Logo"
-              className="w-full h-full object-contain"
-            />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10 px-4 font-sans">
+      <div className="max-w-2xl mx-auto space-y-6 bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-gray-200">
+        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
+          Social Media Searcher
+        </h1>
+
+        {/* Message Display Area */}
+        {message.text && (
+          <div
+            className={`mt-4 p-3 rounded-xl text-center font-medium ${
+              message.type === "error"
+                ? "bg-red-100 text-red-700"
+                : message.type === "success"
+                ? "bg-green-100 text-green-700"
+                : "bg-blue-100 text-blue-700"
+            }`}
+          >
+            {message.text}
           </div>
-          <br />
-          <br />
-          <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-clip-text text mb-4">
-            Mahidol University
-          </h1>
-          <p className="text-gray-550 text-sm sm:text-base lg:text-xl px-4">
-            Application of Natural Language Processing to Study the Impact of
-            Social Media on Mental Health in Children and Adolescents
-          </p>
+        )}
+
+        <div>
+          <label
+            htmlFor="keyword-input"
+            className="mb-1 font-semibold text-gray-700 flex items-center gap-2"
+          >
+            <Hash className="w-4 h-4" />
+            Keyword
+          </label>
+          <input
+            id="keyword-input"
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            className="w-full border px-4 py-3 rounded-xl border-gray-200 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="e.g., #AI, new product launch"
+            disabled={isSearching} /* Disable input while searching */
+          />
         </div>
 
-        {/* Search Form */}
-        <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 p-4 sm:p-6 lg:p-8 mb-6 sm:mb-8">
-          <div className="space-y-4 sm:space-y-6">
-            {/* Keyword Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <Hash className="w-4 h-4" />
-                คำค้นหา (Keywords)
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="ป้อนคำที่ต้องการค้นหา..."
-                  className="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 placeholder-gray-400 text-sm sm:text-base"
-                />
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              </div>
-            </div>
-
-            {/* Limit Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                จำนวนผลลัพธ์ (Amount of Results)
-              </label>
-              <input
-                type="number"
-                max={100}
-                value={limit}
-                onChange={(e) => setLimit(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 text-sm sm:text-base"
-              />
-            </div>
-
-            {/* Platform Selection - Dropdown */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <MessageCircle className="w-4 h-4" />
-                แพลตฟอร์ม (Platform)
-              </label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-700 text-sm sm:text-base bg-white flex items-center justify-between"
-                >
-                  <span className="truncate">{getSelectedPlatformName()}</span>
-                  <ChevronDown
-                    className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""
-                      }`}
-                  />
-                </button>
-
-                {dropdownOpen && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg">
-                    {platforms.map((platform) => {
-                      const IconComponent = platform.icon;
-                      const isSelected = selectedPlatform === platform.id;
-                      return (
-                        <div
-                          key={platform.id}
-                          onClick={() => handlePlatformChange(platform.id)}
-                          className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl ${isSelected ? "bg-blue-50" : ""
-                            }`}
-                        >
-                          <IconComponent
-                            className={`w-5 h-5 ${platform.color}`}
-                          />
-                          <span
-                            className={`font-medium text-sm sm:text-base ${isSelected ? "text-blue-700" : "text-gray-700"
-                              }`}
-                          >
-                            {platform.name}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              {selectedPlatform && (
-                <div className="text-xs text-gray-500 mt-2">
-                  Chosen: {getSelectedPlatformName()}
-                </div>
-              )}
-            </div>
-
-            {/* Search Button */}
-            <button
-              onClick={handleSearch}
-              disabled={loading || !keyword.trim() || !selectedPlatform}
-              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-sm sm:text-base"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  กำลังค้นหา...
-                </>
-              ) : (
-                <>
-                  <Search className="w-5 h-5" />
-                  <span className="hidden xs:inline">
-                    เริ่มค้นหา ({getSelectedPlatformName()})
-                  </span>
-                  <span className="xs:hidden">ค้นหา</span>
-                </>
-              )}
-            </button>
-          </div>
+        <div>
+          <label
+            htmlFor="interval-input"
+            className="block mb-1 font-semibold text-gray-700"
+          >
+            Search Frequency (minutes)
+          </label>
+          <input
+            id="interval-input"
+            type="number"
+            min={1} // Minimum interval of 1 minute
+            value={intervalMin}
+            onChange={(e) => setIntervalMin(Number(e.target.value))}
+            className="w-full border px-4 py-3 rounded-xl border-gray-200 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            disabled={isSearching} /* Disable input while searching */
+          />
         </div>
 
-        {/* Results Section */}
-        {!loading && results.length > 0 && (
-          <div className="space-y-4">
-            {/* Results Header */}
-            <div className="flex items-center gap-3 mb-4 sm:mb-6 flex-wrap">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-green-600 font-semibold text-sm">
-                  {results.length}
-                </span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
-                ผลการค้นหา
-              </h2>
+        <button
+          onClick={handleSearchClick}
+          className={`w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 
+            ${
+              isSearching
+                ? "bg-red-500 hover:bg-red-600"
+                : "bg-green-500 hover:bg-green-600"
+            }
+            ${loading ? "opacity-70 cursor-not-allowed" : ""}
+          `}
+          disabled={loading} // Disable button when loading to prevent multiple clicks
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Searching...
+            </>
+          ) : isSearching ? (
+            "Stop Search"
+          ) : (
+            <>
+              <Search className="w-5 h-5" />
+              Start Search
+            </>
+          )}
+        </button>
 
-              {keyword && (
-                <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200">
-                  <span>คำค้นหา:</span>
-                  <span className="font-semibold text-yellow-800 max-w-32 sm:max-w-none truncate">
-                    {keyword}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Sentiment Filter Buttons */}
-            <div className="flex flex-wrap gap-2 mb-2">
-              {[
-                { label: "ทั้งหมด", value: "all" },
-                { label: "ความคิดเชิงบวก", value: "positive" },
-                { label: "ความคิดเชิงลบ", value: "negative" },
-              ].map(({ label, value }) => (
-                <button
-                  key={value}
-                  onClick={() => setSentimentFilter(value)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium border ${sentimentFilter === value
-                    ? value === "positive"
-                      ? "bg-green-100 text-green-700 border-green-300"
-                      : value === "negative"
-                        ? "bg-red-100 text-red-700 border-red-300"
-                        : "bg-blue-100 text-blue-700 border-blue-300"
-                    : "bg-white text-gray-600 border-gray-300"
-                    }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Results Grid */}
-            <div className="grid gap-3 sm:gap-4">
-              {results
-                .filter((item) => {
-                  if (sentimentFilter === "all") return true;
-                  const s = (item.sentiment || "").toLowerCase();
-
-                  const positiveKeywords = [
-                    "positive",
-                    "ดี",
-                    "เชิงบวก",
-                    "บวก",
-                    "happy",
-                    "joy",
-                    "love",
-                  ];
-                  const negativeKeywords = [
-                    "negative",
-                    "แย่",
-                    "เชิงลบ",
-                    "ลบ",
-                    "sad",
-                    "angry",
-                    "hate",
-                  ];
-
-                  if (sentimentFilter === "positive")
-                    return positiveKeywords.some((kw) => s.includes(kw));
-                  if (sentimentFilter === "negative")
-                    return negativeKeywords.some((kw) => s.includes(kw));
-                  return true;
-                })
-                .map((item, index) => (
-                  <div
-                    key={`${item.platform}-${item.id || index}`}
-                    className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 hover:shadow-lg transition-all duration-200 hover:border-blue-200"
-                  >
-                    {/* Result Header */}
-                    <div className="flex items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-transparent rounded-full flex items-center justify-center flex-shrink-0">
-                          <img
-                            src="https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png"
-                            alt="userimg"
-                            className="w-full h-full object-cover rounded-full"
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm sm:text-base truncate">
-                            <span className="truncate">
-                              {item.username || "Unknown User"}
-                            </span>
-                            {getPlatformIcon(item.platform)}
-                          </h3>
-                          <div className="text-xs text-gray-500 capitalize">
-                            {item.platform}
-                          </div>
-                        </div>
-                      </div>
-
-                      {item.sentiment && (
-                        <span
-                          className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getSentimentColor(
-                            item.sentiment
-                          )}`}
-                        >
-                          <span className="hidden sm:inline">AI: </span>
-                          {item.sentiment}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Result Content */}
-                    <div className="mb-4">
-                      <HighlightedText
-                        text={item.caption || item.info || "ไม่มีข้อความ"}
-                        searchKeyword={keyword}
-                        className="text-gray-700 leading-relaxed text-sm sm:text-base break-words"
-                      />
-                    </div>
-                    {/* Result Footer */}
-                    {(item.postUrl || item.contact || item.videoUrl) && (
-                      <div className="flex justify-end">
-                        <a
-                          href={item.postUrl || item.contact || item.videoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 rounded-lg transition-all duration-200 text-xs sm:text-sm font-medium hover:text-blue-700"
-                        >
-                          <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
-                          {item.platform === "tiktok"
-                            ? "เปิดวิดีโอ"
-                            : "เปิดโพสต์"}
-                        </a>
-                      </div>
+        {/* Display Collected Results in a table */}
+        {allResults.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              Collected Posts ({allResults.length})
+            </h2>
+            <div className="overflow-x-auto rounded-lg shadow-sm border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Platform
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Username
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Caption
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Link
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {allResults
+                    .slice()
+                    .reverse()
+                    .map(
+                      (
+                        result,
+                        index // Display newest first
+                      ) => (
+                        <tr key={index}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                            {result.platform}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {result.username}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
+                            {result.caption}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500">
+                            {result.baseurl ? (
+                              <a
+                                href={result.baseurl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:underline"
+                              >
+                                View Post
+                              </a>
+                            ) : (
+                              "N/A"
+                            )}
+                          </td>
+                        </tr>
+                      )
                     )}
-                  </div>
-                ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        )}
-
-        {/* No Results State */}
-        {!loading && results.length === 0 && keyword && (
-          <div className="text-center py-8 sm:py-12">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Search className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg sm:text-xl font-semibold text-gray-600 mb-2">
-              ไม่พบผลลัพธ์
-            </h3>
-            <p className="text-gray-500 text-sm sm:text-base px-4">
-              ลองเปลี่ยนคำค้นหาหรือเลือกแพลตฟอร์มอื่นดูครับ
-            </p>
-          </div>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <div className="text-center py-8 sm:py-12">
-            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-full mb-4">
-              <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 animate-spin" />
-            </div>
-            <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">
-              กำลังค้นหาจาก {getSelectedPlatformName()}...
-            </h3>
-            <p className="text-gray-500 text-sm sm:text-base">
-              รอสักครู่นะครับ
-            </p>
           </div>
         )}
       </div>

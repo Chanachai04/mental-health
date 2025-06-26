@@ -1,13 +1,12 @@
 const { chromium } = require("playwright");
 const { analyzeSentiment } = require("../utils/sentiment");
 
-// Simplified configuration
 const CONFIG = {
   MAX_RETRIES: 3,
   TIMEOUT: 30000,
   SCROLL_TIMES: 2,
   REQUEST_DELAY: { min: 1500, max: 3500 },
-  MAX_RESULTS: 10,
+  MAX_RESULTS: process.config.LIMIT,
 };
 
 // User Agent pool
@@ -222,7 +221,7 @@ class TikTokScraper {
     this.requestCount = 0;
   }
 
-  async scrapeKeyword(keyword, limit = CONFIG.MAX_RESULTS) {
+  async scrapeKeyword(keyword, limit) {
     await rateLimiter.acquireToken();
     let sessionId = null;
 
@@ -450,7 +449,6 @@ class TikTokScraper {
         const username = extractUsernameFromUrl(link.href);
 
         return {
-          id: index + 1,
           username: username,
           caption:
             text.length > 10 ? text.substring(0, 200) : "No caption available",
@@ -464,7 +462,8 @@ class TikTokScraper {
 // Main API handler
 async function handleSearch(req, res) {
   const keyword = req.query.q?.trim();
-  const limit = parseInt(req.query.limit) || CONFIG.MAX_RESULTS;
+
+  const requestedLimit = parseInt(req.query.limit);
   const includeSentiment = req.query.sentiment !== "false"; // Default to true, set to false if sentiment=false
 
   if (!keyword) {
@@ -483,7 +482,7 @@ async function handleSearch(req, res) {
     });
   }
 
-  if (limit < 1 || limit > 50) {
+  if (requestedLimit < 1 || requestedLimit > 50) {
     return res.status(400).json({
       success: false,
       error: "Invalid limit parameter",
@@ -499,9 +498,11 @@ async function handleSearch(req, res) {
 
     for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
       try {
-        results = await scraper.scrapeKeyword(keyword, limit);
+        results = await scraper.scrapeKeyword(
+          keyword,
+          requestedLimit || MAX_RESULTS
+        );
 
-        // Analyze sentiment for results if requested
         if (includeSentiment && results.length > 0) {
           console.log("Analyzing sentiment for results...");
           results = await analyzeSentimentForResults(results);

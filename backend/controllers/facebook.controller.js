@@ -17,16 +17,13 @@ async function loginAndCacheSession() {
   await page.goto("https://www.facebook.com/login");
   console.log("กรุณาล็อกอินใน browser นี้...");
 
-  // ✅ รอให้เปลี่ยนหน้าไปยัง URL ใดก็ได้ที่ไม่ใช่หน้าล็อกอิน
   await page.waitForNavigation({
     timeout: 0,
     waitUntil: "domcontentloaded",
     url: (url) =>
-      url.hostname.includes("facebook.com") &&
-      !url.pathname.includes("login"),
+      url.hostname.includes("facebook.com") && !url.pathname.includes("login"),
   });
 
-  // ✅ เมื่อเข้าสู่ระบบแล้ว ให้บันทึก session
   const storage = await context.storageState();
   fs.mkdirSync("./sessions", { recursive: true });
   fs.writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storage, null, 2));
@@ -36,13 +33,12 @@ async function loginAndCacheSession() {
   await browser.close();
 }
 
-async function searchFacebook(keyword, limit = 10) {
+async function searchFacebook(keyword, limit) {
   const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
     slowMo: 100,
   });
 
-  // โหลด session จากไฟล์ ถ้ายังไม่มีใน memory
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
     cachedStorageState = JSON.parse(
       fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
@@ -67,7 +63,6 @@ async function searchFacebook(keyword, limit = 10) {
 
   const results = [];
   let lastHeight = 0;
-  let idCounter = 1;
 
   while (results.length < limit) {
     const posts = await page.$$('[role="article"]');
@@ -95,10 +90,8 @@ async function searchFacebook(keyword, limit = 10) {
 
       if (caption !== "unknown") {
         if (!results.some((r) => r.postUrl === postUrl)) {
-          // เรียกวิเคราะห์ความรู้สึก
           const sentiment = await analyzeSentiment(caption);
           results.push({
-            id: idCounter++,
             username,
             caption,
             postUrl,
@@ -127,8 +120,8 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const numLimit = limit ? parseInt(limit) : 10;
-    const results = await searchFacebook(q, numLimit);
+    const numLimit = process.config.LIMIT;
+    const results = await searchFacebook(q, limit || numLimit);
     res.json({
       keyword: q,
       total: results.length,
