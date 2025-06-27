@@ -9,7 +9,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [allResults, setAllResults] = useState([]);
   const [message, setMessage] = useState({ text: "", type: "" }); // State for displaying messages
-  const baseSearchAmount = 45;
+  const baseSearchAmount = 50;
   const [searchLimit, setSearchLimit] = useState(baseSearchAmount); // New state for increasing search limit
 
   const allResultsRef = useRef([]); // Ref to hold all results for the current session

@@ -1,6 +1,5 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
-const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateInstagram.json";
 
 let cachedStorageState = null;
@@ -106,12 +105,6 @@ async function searchInstagram(keyword, limit) {
           );
         } catch {}
 
-        const sentimentResult = await analyzeSentiment(caption);
-        const sentiment =
-          typeof sentimentResult === "string"
-            ? sentimentResult
-            : sentimentResult.result || "ไม่สามารถระบุได้";
-
         console.log(
           `ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
         );
@@ -120,7 +113,6 @@ async function searchInstagram(keyword, limit) {
           username: username || "unknown",
           caption: caption || "ไม่มี caption",
           postUrl,
-          sentiment,
         };
       } catch (err) {
         console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);

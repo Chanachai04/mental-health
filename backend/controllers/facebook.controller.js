@@ -1,6 +1,5 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
-const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateFacebook.json";
 
 let cachedStorageState = null;
@@ -90,12 +89,10 @@ async function searchFacebook(keyword, limit) {
 
       if (caption !== "unknown") {
         if (!results.some((r) => r.postUrl === postUrl)) {
-          const sentiment = await analyzeSentiment(caption);
           results.push({
             username,
             caption,
             postUrl,
-            sentiment,
           });
         }
       }

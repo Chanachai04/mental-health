@@ -1,7 +1,6 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
-const { analyzeSentiment } = require("../utils/sentiment");
 
 let cachedStorageState = null;
 
@@ -74,17 +73,10 @@ async function searchTwitter(keyword, limit) {
 
       if (caption !== "unknown" && postUrl !== "unknown") {
         if (!results.some((r) => r.postUrl === postUrl)) {
-          const sentimentResult = await analyzeSentiment(caption);
-          const sentiment =
-            typeof sentimentResult === "string"
-              ? sentimentResult
-              : sentimentResult.result || "ไม่สามารถระบุได้";
-
           results.push({
             username,
             caption,
             postUrl,
-            sentiment,
           });
         }
       }

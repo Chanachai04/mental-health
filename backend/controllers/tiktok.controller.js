@@ -1,5 +1,4 @@
 const { chromium } = require("playwright");
-const { analyzeSentiment } = require("../utils/sentiment");
 
 const CONFIG = {
   MAX_RETRIES: 3,
@@ -15,14 +14,12 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
 ];
 
-// Viewports
 const VIEWPORTS = [
   { width: 1920, height: 1080 },
   { width: 1366, height: 768 },
   { width: 1440, height: 900 },
 ];
 
-// Utility functions
 function getRandomElement(array) {
   return array[Math.floor(Math.random() * array.length)];
 }
@@ -35,53 +32,6 @@ async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Function to extract username from TikTok URL
-function extractUsernameFromUrl(url) {
-  if (!url) return "Unknown user";
-
-  try {
-    // Pattern: https://www.tiktok.com/@username/video/...
-    const match = url.match(/@([^\/]+)/);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return "Unknown user";
-  } catch (error) {
-    return "Unknown user";
-  }
-}
-
-// Function to analyze sentiment for results
-async function analyzeSentimentForResults(results) {
-  try {
-    const analyzedResults = await Promise.all(
-      results.map(async (result) => {
-        try {
-          const sentiment = await analyzeSentiment(result.caption);
-          return {
-            ...result,
-            sentiment: sentiment,
-          };
-        } catch (error) {
-          console.warn(
-            `Failed to analyze sentiment for result ${result.id}:`,
-            error.message
-          );
-        }
-      })
-    );
-    return analyzedResults;
-  } catch (error) {
-    console.error("Error analyzing sentiment for results:", error);
-    // Return original results if sentiment analysis fails
-    return results.map((result) => ({
-      ...result,
-      sentiment: "ความคิดเห็นเป็นกลาง",
-    }));
-  }
-}
-
-// Anti-detection script
 const ANTI_DETECTION_SCRIPT = `
 (() => {
   Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -99,7 +49,6 @@ const ANTI_DETECTION_SCRIPT = `
 })();
 `;
 
-// Rate limiter
 class RateLimiter {
   constructor(tokensPerSecond = 0.5, bucketSize = 3) {
     this.tokensPerSecond = tokensPerSecond;
@@ -131,7 +80,6 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter();
 
-// Browser session manager
 class BrowserSessionManager {
   constructor() {
     this.activeSessions = new Map();
@@ -170,7 +118,6 @@ class BrowserSessionManager {
     await context.addInitScript(ANTI_DETECTION_SCRIPT);
     const page = await context.newPage();
 
-    // Block unnecessary resources
     await page.route("**/*", (route) => {
       const resourceType = route.request().resourceType();
       const url = route.request().url();
@@ -214,7 +161,6 @@ class BrowserSessionManager {
 
 const sessionManager = new BrowserSessionManager();
 
-// TikTok scraper
 class TikTokScraper {
   constructor() {
     this.requestCount = 0;
@@ -233,7 +179,6 @@ class TikTokScraper {
       sessionId = session.sessionId;
       const page = session.page;
 
-      // Navigate to TikTok
       await page.goto("https://www.tiktok.com", {
         waitUntil: "domcontentloaded",
         timeout: CONFIG.TIMEOUT,
@@ -242,7 +187,6 @@ class TikTokScraper {
       await sleep(2000);
       await this.checkForBlocking(page);
 
-      // Perform search
       const results = await this.performSearch(page, keyword, limit);
       console.log(`Success: Found ${results.length} results`);
       return results;
@@ -258,7 +202,6 @@ class TikTokScraper {
 
   async performSearch(page, keyword, limit) {
     try {
-      // Try search functionality
       await page.waitForSelector(
         '[data-testid="search-icon"], [aria-label*="Search"]',
         {
@@ -281,7 +224,6 @@ class TikTokScraper {
       );
       await page.keyboard.press("Enter");
     } catch (error) {
-      // Fallback to direct URL
       console.log("Using direct URL navigation");
       const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(
         keyword
@@ -295,7 +237,6 @@ class TikTokScraper {
     await sleep(3000);
     await this.checkForBlocking(page);
 
-    // Simulate scrolling
     for (let i = 0; i < CONFIG.SCROLL_TIMES; i++) {
       await sleep(randomDelay(800, 2000));
       await page.evaluate(() => {
@@ -345,12 +286,10 @@ class TikTokScraper {
 
   async extractWithMainSelectors(page, limit) {
     return await page.evaluate((maxResults) => {
-      // Function to extract username from URL (inside browser context)
       function extractUsernameFromUrl(url) {
         if (!url) return "Unknown user";
 
         try {
-          // Pattern: https://www.tiktok.com/@username/video/...
           const match = url.match(/@([^\/]+)/);
           if (match && match[1]) {
             return match[1];
@@ -381,7 +320,6 @@ class TikTokScraper {
             const linkElement = element.querySelector('a[href*="/video/"]');
             const videoUrl = linkElement ? linkElement.href : "";
 
-            // Extract username from videoUrl instead of trying to find it separately
             const username = extractUsernameFromUrl(videoUrl);
 
             const captionElement = element.querySelector(
@@ -406,7 +344,6 @@ class TikTokScraper {
             }
 
             return {
-              id: index + 1,
               username: username,
               caption: caption || "No caption available",
               postUrl: videoUrl,
@@ -421,12 +358,9 @@ class TikTokScraper {
 
   async extractWithFallbackSelectors(page, limit) {
     return await page.evaluate((maxResults) => {
-      // Function to extract username from URL (inside browser context)
       function extractUsernameFromUrl(url) {
         if (!url) return "Unknown user";
-
         try {
-          // Pattern: https://www.tiktok.com/@username/video/...
           const match = url.match(/@([^\/]+)/);
           if (match && match[1]) {
             return match[1];
@@ -443,10 +377,7 @@ class TikTokScraper {
         const container =
           link.closest("div, article, section") || link.parentElement;
         const text = container ? container.textContent?.trim() || "" : "";
-
-        // Extract username from the video URL
         const username = extractUsernameFromUrl(link.href);
-
         return {
           username: username,
           caption:
@@ -458,34 +389,14 @@ class TikTokScraper {
   }
 }
 
-// Main API handler
 async function handleSearch(req, res) {
   const keyword = req.query.q?.trim();
-
   const requestedLimit = parseInt(req.query.limit);
-  const includeSentiment = req.query.sentiment !== "false"; // Default to true, set to false if sentiment=false
-
   if (!keyword) {
     return res.status(400).json({
       success: false,
       error: "Missing query parameter",
       message: 'Please provide a search keyword using the "q" parameter',
-    });
-  }
-
-  if (keyword.length < 1 || keyword.length > 100) {
-    return res.status(400).json({
-      success: false,
-      error: "Invalid query length",
-      message: "Search keyword must be between 1-100 characters",
-    });
-  }
-
-  if (requestedLimit < 1 || requestedLimit > 50) {
-    return res.status(400).json({
-      success: false,
-      error: "Invalid limit parameter",
-      message: "Limit must be between 1-50",
     });
   }
 
@@ -498,11 +409,6 @@ async function handleSearch(req, res) {
     for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
       try {
         results = await scraper.scrapeKeyword(keyword, requestedLimit);
-
-        if (includeSentiment && results.length > 0) {
-          console.log("Analyzing sentiment for results...");
-          results = await analyzeSentimentForResults(results);
-        }
 
         const response = {
           keyword,
@@ -527,51 +433,12 @@ async function handleSearch(req, res) {
 
     throw lastError || new Error("All retry attempts failed");
   } catch (error) {
-    let statusCode = 500;
-    let userMessage = "An unexpected error occurred while searching TikTok";
-
-    if (
-      error.message.includes("blocked") ||
-      error.message.includes("Rate limit")
-    ) {
-      statusCode = 429;
-      userMessage = "TikTok is currently blocking requests";
-    } else if (error.message.includes("timeout")) {
-      statusCode = 504;
-      userMessage = "Request timed out";
-    }
-
-    return res.status(statusCode).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
 }
 
-// Graceful shutdown
-async function gracefulShutdown() {
-  console.log("Initiating graceful shutdown...");
-  try {
-    await sessionManager.closeAllSessions();
-    console.log("Graceful shutdown completed");
-    process.exit(0);
-  } catch (error) {
-    console.error("Error during shutdown:", error);
-    process.exit(1);
-  }
-}
-
-process.on("SIGINT", gracefulShutdown);
-process.on("SIGTERM", gracefulShutdown);
-
 module.exports = {
   handleSearch,
-  CONFIG,
-  sessionManager,
-  utils: {
-    sleep,
-    randomDelay,
-    getRandomElement,
-    extractUsernameFromUrl,
-    analyzeSentimentForResults,
-  },
 };
