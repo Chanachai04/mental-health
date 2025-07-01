@@ -1,7 +1,7 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
+const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
-
 let cachedStorageState = null;
 
 async function loginAndCacheSession() {
@@ -31,9 +31,7 @@ async function searchTwitter(keyword, limit) {
   });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(
-      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
-    );
+    cachedStorageState = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, "utf-8"));
     console.log("โหลด session จากไฟล์ storageStateTwitter.json");
   }
 
@@ -61,22 +59,19 @@ async function searchTwitter(keyword, limit) {
     for (const tweet of tweets) {
       if (results.length >= limit) break;
 
-      const username = await tweet
-        .$eval('div[dir="ltr"] > span', (el) => el.innerText)
-        .catch(() => "unknown");
-      const caption = await tweet
-        .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
-        .catch(() => "unknown");
-      const postUrl = await tweet
-        .$eval('a[role="link"][href*="/status/"]', (a) => a.href)
-        .catch(() => "unknown");
+      const username = await tweet.$eval('div[dir="ltr"] > span', (el) => el.innerText).catch(() => "unknown");
+      const caption = await tweet.$eval('div[data-testid="tweetText"]', (el) => el.innerText).catch(() => "unknown");
+      const postUrl = await tweet.$eval('a[role="link"][href*="/status/"]', (a) => a.href).catch(() => "unknown");
 
       if (caption !== "unknown" && postUrl !== "unknown") {
+        const sentimentResult = await analyzeSentiment(caption);
+
         if (!results.some((r) => r.postUrl === postUrl)) {
           results.push({
             username,
             caption,
             postUrl,
+            analyzeSentiment: sentimentResult,
           });
         }
       }

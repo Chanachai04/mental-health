@@ -28,19 +28,18 @@ app.use("/api/tiktok", tiktokRoutes);
 app.post("/api/save", async (req, res) => {
   const { username, caption, platform, baseurl } = req.body;
   try {
-    const [rows] = await pool.query(
-      `SELECT 1 FROM mental_health WHERE caption = ? LIMIT 1`,
-      [caption]
-    );
+    const [rows] = await pool.query(`SELECT 1 FROM mental_health WHERE caption = ? LIMIT 1`, [caption]);
 
     if (rows.length > 0) {
       return res.status(409).json({ error: "Duplicate caption entry" });
     }
 
-    await pool.query(
-      `INSERT INTO mental_health (username, caption, platform, baseurl) VALUES (?, ?, ?, ?)`,
-      [username, caption, platform, baseurl]
-    );
+    await pool.query(`INSERT INTO mental_health (username, caption, platform, baseurl) VALUES (?, ?, ?, ?)`, [
+      username,
+      caption,
+      platform,
+      baseurl,
+    ]);
 
     res.json({ success: true });
   } catch (err) {

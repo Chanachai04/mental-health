@@ -1,5 +1,6 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
+const { analyzeSentiment } = require("../utils/sentiment");
 const STORAGE_STATE_PATH = "./sessions/storageStateInstagram.json";
 
 let cachedStorageState = null;
@@ -31,9 +32,7 @@ async function searchInstagram(keyword, limit) {
   });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(
-      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
-    );
+    cachedStorageState = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, "utf-8"));
     console.log("โหลด session จากไฟล์ storageStateInstagram.json");
   }
 
@@ -46,9 +45,7 @@ async function searchInstagram(keyword, limit) {
   });
   const page = await context.newPage();
 
-  const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(
-    keyword.replace("#", "")
-  )}/`;
+  const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(keyword.replace("#", ""))}/`;
   await page.goto(searchUrl, { waitUntil: "load" });
 
   for (let i = 0; i < 3; i++) {
@@ -84,10 +81,7 @@ async function searchInstagram(keyword, limit) {
 
         let username = "unknown";
         try {
-          username = await postPage.$eval(
-            "span._ap3a._aaco._aacw._aacx._aad7._aade",
-            (el) => el.innerText.trim()
-          );
+          username = await postPage.$eval("span._ap3a._aaco._aacw._aacx._aad7._aade", (el) => el.innerText.trim());
         } catch {}
 
         let caption = "ไม่มี caption";
@@ -105,14 +99,13 @@ async function searchInstagram(keyword, limit) {
           );
         } catch {}
 
-        console.log(
-          `ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
-        );
-
+        console.log(`ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`);
+        const sentimentResult = await analyzeSentiment(caption);
         return {
           username: username || "unknown",
           caption: caption || "ไม่มี caption",
           postUrl,
+          analyzeSentiment: sentimentResult,
         };
       } catch (err) {
         console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
