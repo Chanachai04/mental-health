@@ -264,16 +264,18 @@ class TikTokScraper {
             results.slice(0, limit).map(async (item) => {
               try {
                 const sentimentResult = await analyzeSentiment(item.caption);
-                return {
-                  ...item,
-                  sentiment: sentimentResult,
-                };
+                if (sentimentResult === "ความคิดเห็นเชิงลบ") {
+                  return {
+                    ...item,
+                    sentiment: sentimentResult,
+                  };
+                }
               } catch (error) {
                 console.warn("Sentiment analysis failed for:", item.caption, error.message);
-                return {
-                  ...item,
-                  sentiment: { score: 0, label: "neutral", error: "Analysis failed" },
-                };
+                // return {
+                //   ...item,
+                //   sentiment: { score: 0, label: "neutral", error: "Analysis failed" },
+                // };
               }
             })
           );

@@ -101,12 +101,14 @@ async function searchInstagram(keyword, limit) {
 
         console.log(`ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`);
         const sentimentResult = await analyzeSentiment(caption);
-        return {
-          username: username || "unknown",
-          caption: caption || "ไม่มี caption",
-          postUrl,
-          analyzeSentiment: sentimentResult,
-        };
+        if (sentimentResult === "ความคิดเห็นเชิงลบ") {
+          return {
+            username: username || "unknown",
+            caption: caption || "ไม่มี caption",
+            postUrl,
+            analyzeSentiment: sentimentResult,
+          };
+        }
       } catch (err) {
         console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
         console.log("สาเหตุ:", err.message);

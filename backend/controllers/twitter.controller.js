@@ -65,14 +65,15 @@ async function searchTwitter(keyword, limit) {
 
       if (caption !== "unknown" && postUrl !== "unknown") {
         const sentimentResult = await analyzeSentiment(caption);
-
-        if (!results.some((r) => r.postUrl === postUrl)) {
-          results.push({
-            username,
-            caption,
-            postUrl,
-            analyzeSentiment: sentimentResult,
-          });
+        if (sentimentResult === "ความคิดเห็นเชิงลบ") {
+          if (!results.some((r) => r.postUrl === postUrl)) {
+            results.push({
+              username,
+              caption,
+              postUrl,
+              analyzeSentiment: sentimentResult,
+            });
+          }
         }
       }
     }

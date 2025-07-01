@@ -10,7 +10,7 @@ function HomePage() {
   const [isSearching, setIsSearching] = useState(false);
   const [allResults, setAllResults] = useState([]);
   const [message, setMessage] = useState({ text: "", type: "" }); // State for displaying messages
-  const baseSearchAmount = 50;
+  const baseSearchAmount = 10;
   const [searchLimit, setSearchLimit] = useState(baseSearchAmount); // New state for increasing search limit
 
   const allResultsRef = useRef([]); // Ref to hold all results for the current session
@@ -108,10 +108,7 @@ function HomePage() {
         "success"
       );
     } else {
-      displayMessage(
-        "Search stopped. No new unique data was found or saved during this session.",
-        "info"
-      );
+      displayMessage("Search stopped. No new unique data was found or saved during this session.", "info");
     }
     setAllResults([]); // Clear displayed results
     allResultsRef.current = []; // Clear ref for next session
@@ -137,9 +134,7 @@ function HomePage() {
       const fetchPromises = platforms.map(async (platform) => {
         // Fetch data from each platform's API endpoint
         const res = await fetch(
-          `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(
-            keyword
-          )}&limit=${searchLimit}` // Use the increasing searchLimit
+          `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(keyword)}&limit=${searchLimit}` // Use the increasing searchLimit
         );
         const data = await res.json();
 
@@ -171,10 +166,7 @@ function HomePage() {
       // Only update and save if new unique results were found
       if (newlyFoundUniqueResults.length > 0) {
         setAllResults((prev) => [...prev, ...newlyFoundUniqueResults]);
-        allResultsRef.current = [
-          ...allResultsRef.current,
-          ...newlyFoundUniqueResults,
-        ];
+        allResultsRef.current = [...allResultsRef.current, ...newlyFoundUniqueResults];
 
         let savedNewlyFoundCount = 0;
         for (const result of newlyFoundUniqueResults) {
@@ -189,10 +181,7 @@ function HomePage() {
             if (response.ok) {
               savedNewlyFoundCount++;
             } else {
-              console.error(
-                "Failed to save newly found post:",
-                await response.text()
-              );
+              console.error("Failed to save newly found post:", await response.text());
             }
           } catch (saveError) {
             console.error("Error saving newly found post:", saveError);
@@ -237,20 +226,16 @@ function HomePage() {
           alt="Mahidol University"
           className="w-[100px] sm:w-[150px] h-[100px] sm:h-[150px]"
         />
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mt-2">
-          Mahidol University
-        </h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mt-2">Mahidol University</h1>
         <p className="text-base sm:text-xl text-gray-600 mt-2 ">
-          Application of Natural Language Processing to Study the Impact of
-          Social Media on Mental Health in Children And Adolescents
+          Application of Natural Language Processing to Study the Impact of Social Media on Mental Health in Children
+          And Adolescents
         </p>
       </div>
 
       <div className="w-full max-w-2xl mx-auto">
         <div className=" space-y-6 bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-gray-200">
-          <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
-            Social Media Searcher
-          </h1>
+          <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">Social Media Searcher</h1>
 
           {/* Message Display Area */}
           {message.text && (
@@ -268,10 +253,7 @@ function HomePage() {
           )}
 
           <div>
-            <label
-              htmlFor="keyword-input"
-              className="mb-1 font-semibold text-gray-700 flex items-center gap-2"
-            >
+            <label htmlFor="keyword-input" className="mb-1 font-semibold text-gray-700 flex items-center gap-2">
               <Hash className="w-4 h-4" />
               Keyword
             </label>
@@ -287,10 +269,7 @@ function HomePage() {
           </div>
 
           <div>
-            <label
-              htmlFor="interval-input"
-              className="block mb-1 font-semibold text-gray-700"
-            >
+            <label htmlFor="interval-input" className="block mb-1 font-semibold text-gray-700">
               Search Frequency (minutes)
             </label>
             <input
@@ -307,11 +286,7 @@ function HomePage() {
           <button
             onClick={handleSearchClick}
             className={`w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 
-            ${
-              isSearching
-                ? "bg-red-500 hover:bg-red-600"
-                : "bg-green-500 hover:bg-green-600"
-            }
+            ${isSearching ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}
             ${loading ? "opacity-70 cursor-not-allowed" : ""}
           `}
             disabled={loading} // Disable button when loading to prevent multiple clicks
