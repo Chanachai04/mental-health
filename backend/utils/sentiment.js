@@ -1,48 +1,40 @@
-// utils/sentiment.js
 require("dotenv").config();
+const fetch = require("node-fetch");
 
-const LM_STUDIO_URL = process.env.LM_STUDIO_URL;
+const API_URL =
+  process.env.SENTIMENT_API_URL || "http://119.59.118.120:5000/sentiment";
 
 async function analyzeSentiment(message) {
   if (!message || message.trim() === "") return "ไม่สามารถระบุได้";
 
-  const apiUrl = `${LM_STUDIO_URL}/v1/chat/completions`;
-
   try {
-    const response = await fetch(apiUrl, {
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "pathumma-llm-text-1.0.0",
-        messages: [
-          {
-            role: "system",
-            content:
-              "คุณคือนักวิเคราะห์ข้อความ ให้ตอบเพียงคำเดียว: 'ความคิดเห็นเชิงบวก' หรือ 'ความคิดเห็นเชิงลบ' เท่านั้น ห้ามอธิบายเพิ่มเติม ห้ามใช้คำอื่น",
-          },
-          {
-            role: "user",
-            content: `วิเคราะห์ข้อความ: "${message}"`,
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 100,
-        stream: false,
-      }),
+      body: JSON.stringify({ text: message }),
     });
 
-    if (!response.ok) throw new Error(`LM Studio error: ${response.status}`);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
 
     const data = await response.json();
-    const result = data.choices?.[0]?.message?.content?.trim();
+    const sentiment = data?.sentiment;
 
-    if (["ความคิดเห็นเชิงบวก", "ความคิดเห็นเชิงลบ"].includes(result)) {
-      return result;
+    // Log all available sentiment data
+    // console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
+    // console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
+    // console.log("VADER Compound Score:", sentiment.vader?.compound);
+    // console.log("VADER All Scores:", sentiment.vader);
+
+    // Example decision logic
+    if (sentiment.vader?.compound >= 0) {
+      return "ความคิดเห็นเชิงบวก";
+    } else if (sentiment.vader?.compound < 0) {
+      return "ความคิดเห็นเชิงลบ";
     } else {
       return "ไม่สามารถระบุได้";
     }
   } catch (err) {
-    console.error("Sentiment error:", err.message);
+    console.error("Sentiment API error:", err.message);
     return "ไม่สามารถระบุได้";
   }
 }

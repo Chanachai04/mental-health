@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, Hash, Loader2, ChartLine } from "lucide-react";
-import { Link } from "react-router-dom";
 
 function HomePage() {
   const [keyword, setKeyword] = useState("");
@@ -10,7 +9,7 @@ function HomePage() {
   const [isSearching, setIsSearching] = useState(false);
   const [allResults, setAllResults] = useState([]);
   const [message, setMessage] = useState({ text: "", type: "" }); // State for displaying messages
-  const baseSearchAmount = 50;
+  const baseSearchAmount = 10;
   const [searchLimit, setSearchLimit] = useState(baseSearchAmount); // New state for increasing search limit
 
   const allResultsRef = useRef([]); // Ref to hold all results for the current session
@@ -18,7 +17,8 @@ function HomePage() {
   const intervalIdRef = useRef(null); // Ref to hold the interval ID for clearing
   const messageTimeoutRef = useRef(null); // Ref to clear message timeout
 
-  const platforms = ["facebook", "instagram", "twitter", "tiktok"];
+  const platforms = ["instagram", "twitter", "tiktok"];
+  // const platforms = ["facebook", "instagram", "twitter", "tiktok"];
 
   // Helper function to display messages in the UI
   const displayMessage = (text, type = "info") => {
@@ -137,7 +137,7 @@ function HomePage() {
       const fetchPromises = platforms.map(async (platform) => {
         // Fetch data from each platform's API endpoint
         const res = await fetch(
-          `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(
+          `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(
             keyword
           )}&limit=${searchLimit}` // Use the increasing searchLimit
         );
@@ -180,11 +180,14 @@ function HomePage() {
         for (const result of newlyFoundUniqueResults) {
           try {
             // Attempt to save each newly found unique post immediately
-            const response = await fetch("http://localhost:3000/api/save", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(result),
-            });
+            const response = await fetch(
+              "http://119.59.118.120:3000/api/save",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(result),
+              }
+            );
 
             if (response.ok) {
               savedNewlyFoundCount++;
@@ -331,91 +334,14 @@ function HomePage() {
             )}
           </button>
 
-          <Link
-            to={"/dashboard"}
-            className="`w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
+          <a
+            href="http://119.59.118.120:5050/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
           >
-            <ChartLine />
-            Dashboard
-          </Link>
-
-          {/* Display Collected Results in a table
-          {allResults.length > 0 && (
-            <div className="mt-8">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Collected Posts ({allResults.length})
-              </h2>
-              <div className="overflow-x-auto rounded-lg shadow-sm border border-gray-100">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Platform
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Username
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Caption
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Link
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {allResults
-                      .slice()
-                      .reverse()
-                      .map(
-                        (
-                          result,
-                          index // Display newest first
-                        ) => (
-                          <tr key={index}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                              {result.platform}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {result.username}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
-                              {result.caption}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500">
-                              {result.baseurl ? (
-                                <a
-                                  href={result.baseurl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="hover:underline"
-                                >
-                                  View Post
-                                </a>
-                              ) : (
-                                "N/A"
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )} */}
+            <ChartLine /> Dashboard
+          </a>
         </div>
       </div>
     </div>

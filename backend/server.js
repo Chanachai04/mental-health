@@ -49,7 +49,16 @@ app.post("/api/save", async (req, res) => {
   }
 });
 
+app.get("/api/info", async (req, res) => {
+  try {
+    const [rows] = await pool.query(`SELECT * FROM mental_health`);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch data" });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`LM Studio URL: ${process.env.LM_STUDIO_URL}`);
+  console.log(`Server running on http://119.59.118.120:${PORT}`);
 });
