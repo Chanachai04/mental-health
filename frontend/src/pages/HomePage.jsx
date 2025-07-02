@@ -137,7 +137,7 @@ function HomePage() {
       const fetchPromises = platforms.map(async (platform) => {
         // Fetch data from each platform's API endpoint
         const res = await fetch(
-          `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(
+          `http://localhost:3000/api/${platform}/search?q=${encodeURIComponent(
             keyword
           )}&limit=${searchLimit}` // Use the increasing searchLimit
         );

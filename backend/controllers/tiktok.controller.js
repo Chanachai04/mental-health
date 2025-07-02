@@ -275,31 +275,7 @@ class TikTokScraper {
       try {
         const results = await strategy(page, limit);
         if (results && results.length > 0) {
-          // วิเคราะห์ sentiment หลังจาก extract ข้อมูลแล้ว
-          const resultsWithSentiment = await Promise.all(
-            results.slice(0, limit).map(async (item) => {
-              try {
-                const sentimentResult = await analyzeSentiment(item.caption);
-                if (sentimentResult === "ความคิดเห็นเชิงลบ") {
-                  return {
-                    ...item,
-                    sentiment: sentimentResult,
-                  };
-                }
-              } catch (error) {
-                console.warn(
-                  "Sentiment analysis failed for:",
-                  item.caption,
-                  error.message
-                );
-                // return {
-                //   ...item,
-                //   sentiment: { score: 0, label: "neutral", error: "Analysis failed" },
-                // };
-              }
-            })
-          );
-          return resultsWithSentiment;
+          return results.slice(0, limit);
         }
       } catch (error) {
         console.warn("Extraction strategy failed:", error.message);
@@ -446,6 +422,10 @@ async function handleSearch(req, res) {
         return res.json(response);
       } catch (error) {
         lastError = error;
+        console.log(
+          `Attempt ${attempt}/${CONFIG.MAX_RETRIES} failed: ${error.message}`
+        );
+
         if (attempt < CONFIG.MAX_RETRIES) {
           const backoffTime = Math.min(1000 * Math.pow(2, attempt), 10000);
           await sleep(backoffTime);

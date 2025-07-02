@@ -1,8 +1,7 @@
 require("dotenv").config();
 const fetch = require("node-fetch");
 
-const API_URL =
-  process.env.SENTIMENT_API_URL || "http://119.59.118.120:5000/sentiment";
+const LM_STUDIO_URL = process.env.LM_STUDIO_URL;
 
 async function analyzeSentiment(message) {
   if (!message || message.trim() === "") return "ไม่สามารถระบุได้";
@@ -17,19 +16,10 @@ async function analyzeSentiment(message) {
     if (!response.ok) throw new Error(`API error: ${response.status}`);
 
     const data = await response.json();
-    const sentiment = data?.sentiment;
+    const result = data.choices?.[0]?.message?.content?.trim();
 
-    // Log all available sentiment data
-    // console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
-    // console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
-    // console.log("VADER Compound Score:", sentiment.vader?.compound);
-    // console.log("VADER All Scores:", sentiment.vader);
-
-    // Example decision logic
-    if (sentiment.vader?.compound >= 0) {
-      return "ความคิดเห็นเชิงบวก";
-    } else if (sentiment.vader?.compound < 0) {
-      return "ความคิดเห็นเชิงลบ";
+    if (["ความคิดเห็นเชิงบวก", "ความคิดเห็นเชิงลบ"].includes(result)) {
+      return result;
     } else {
       return "ไม่สามารถระบุได้";
     }

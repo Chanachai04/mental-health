@@ -32,9 +32,7 @@ async function searchInstagram(keyword, limit) {
   });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(
-      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
-    );
+    cachedStorageState = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, "utf-8"));
     console.log("โหลด session จากไฟล์ storageStateInstagram.json");
   }
 
@@ -45,21 +43,12 @@ async function searchInstagram(keyword, limit) {
   const context = await browser.newContext({
     storageState: cachedStorageState,
   });
+  const page = await context.newPage();
 
-  const postTasks = [];
-
-  // Handle multiple keywords
-  const keywords = keyword.split(",").map((k) => k.trim());
-
-  for (let i = 0; i < keywords.length; i++) {
-    const currentKeyword = keywords[i];
-
-    const task = (async () => {
-      const page = await context.newPage();
-      const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(
-        currentKeyword.replace("#", "")
-      )}/`;
-      await page.goto(searchUrl, { waitUntil: "load" });
+  const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(
+    keyword.replace("#", "")
+  )}/`;
+  await page.goto(searchUrl, { waitUntil: "load" });
 
       for (let i = 0; i < 3; i++) {
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
@@ -87,16 +76,13 @@ async function searchInstagram(keyword, limit) {
           await postPage.goto(postUrl, { waitUntil: "load", timeout: 30000 });
           await postPage.waitForTimeout(2000);
 
-          // ✅ Updated username selector
-          let username = "unknown";
-          try {
-            username = await postPage.$eval(
-              'header a[href^="/"][role="link"] span',
-              (el) => el.innerText.trim()
-            );
-          } catch (e) {
-            console.warn("หา username ไม่เจอ:", e.message);
-          }
+        let username = "unknown";
+        try {
+          username = await postPage.$eval(
+            "span._ap3a._aaco._aacw._aacx._aad7._aade",
+            (el) => el.innerText.trim()
+          );
+        } catch {}
 
           // ✅ Updated caption selector
           let caption = "ไม่มี caption";
@@ -116,22 +102,22 @@ async function searchInstagram(keyword, limit) {
             console.warn("หา caption ไม่เจอ:", e.message);
           }
 
-          console.log(
-            `ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
-          );
-          const sentimentResult = await analyzeSentiment(caption);
-          if (sentimentResult === "ความคิดเห็นเชิงลบ") {
-            return {
-              username: username || "unknown",
-              caption: caption || "ไม่มี caption",
-              postUrl,
-              analyzeSentiment: sentimentResult,
-            };
-          }
-        } catch (err) {
-          console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
-          console.log("สาเหตุ:", err.message);
-          return null;
+        console.log(
+          `ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
+        );
+
+        return {
+          username: username || "unknown",
+          caption: caption || "ไม่มี caption",
+          postUrl,
+        };
+      } catch (err) {
+        console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
+        console.log("สาเหตุ:", err.message);
+        return null;
+      } finally {
+        if (postPage && !postPage.isClosed()) {
+          await postPage.close();
         }
       }
     })();
