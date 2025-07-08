@@ -36,7 +36,7 @@ async function loginAndCacheSession() {
 async function searchTwitter(keyword, limitRaw) {
   const limit = parseInt(limitRaw) || 10;
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     slowMo: 100,
   });
 
@@ -73,11 +73,11 @@ async function searchTwitter(keyword, limitRaw) {
     for (const tweet of tweets) {
       if (results.length >= limit) break;
 
-      const caption = await tweet.$eval('div[data-testid="tweetText"]', el => el.innerText).catch(() => null);
-      const postUrl = await tweet.$eval('a[role="link"][href*="/status/"]', el => el.href).catch(() => null);
-      const username = await tweet.$eval('div[dir="ltr"] > span', el => el.innerText).catch(() => "unknown");
+      const caption = await tweet.$eval('div[data-testid="tweetText"]', (el) => el.innerText).catch(() => null);
+      const postUrl = await tweet.$eval('a[role="link"][href*="/status/"]', (el) => el.href).catch(() => null);
+      const username = await tweet.$eval('div[dir="ltr"] > span', (el) => el.innerText).catch(() => "unknown");
 
-      if (caption && postUrl && !results.some(r => r.postUrl === postUrl)) {
+      if (caption && postUrl && !results.some((r) => r.postUrl === postUrl)) {
         const sentiment = await analyzeSentiment(caption);
         if (sentiment === "ความคิดเห็นเชิงลบ") {
           results.push({

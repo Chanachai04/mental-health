@@ -43,10 +43,9 @@ async function searchFacebook(keyword, limit) {
   const context = await browser.newContext({
     storageState: cachedStorageState,
   });
-<<<<<<< HEAD
 
   const postResults = [];
-  const keywords = keyword.split(",").map(k => k.trim());
+  const keywords = keyword.split(",").map((k) => k.trim());
   const totalKeywords = keywords.length;
 
   let totalResults = 0;
@@ -94,52 +93,6 @@ async function searchFacebook(keyword, limit) {
               }
             }
           }
-=======
-  const page = await context.newPage();
-  const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(
-    keyword
-  )}`;
-  await page.goto(searchUrl, { waitUntil: "load" });
-
-      await page.waitForSelector('[role="article"]', { timeout: 10000 });
-
-      const results = [];
-      let lastHeight = 0;
-
-      // Scroll and collect posts until the limit is met
-      while (results.length < limit && results.length + totalResults < limit) {
-        const posts = await page.$$('[role="article"]');
-
-        for (const post of posts) {
-          if (results.length >= limit || results.length + totalResults >= limit)
-            break;
-
-      const username =
-        (await post
-          .$eval("strong a", (el) => el.innerText)
-          .catch(() => null)) ||
-        (await post
-          .$eval("h3 a, h3 span", (el) => el.innerText)
-          .catch(() => null)) ||
-        (await post
-          .$eval('div[dir="auto"] span', (el) => el.innerText)
-          .catch(() => "unknown"));
-
-      const caption = await post
-        .$eval('div[dir="auto"]', (el) => el.innerText)
-        .catch(() => "unknown");
-      const postUrl = await post
-        .$eval('a[tabindex="0"]', (a) => a.href)
-        .catch(() => "unknown");
-
-      if (caption !== "unknown") {
-        if (!results.some((r) => r.postUrl === postUrl)) {
-          results.push({
-            username,
-            caption,
-            postUrl,
-          });
->>>>>>> 109133f4b340b67879d151ea98f520ade7b710a3
         }
 
         lastHeight = await page.evaluate("document.body.scrollHeight");
@@ -150,23 +103,9 @@ async function searchFacebook(keyword, limit) {
         if (newHeight === lastHeight) break;
       }
 
-<<<<<<< HEAD
       return results.slice(0, limit);
     })();
 
-=======
-        lastHeight = await page.evaluate("document.body.scrollHeight");
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-        await page.waitForTimeout(2000);
-
-        const newHeight = await page.evaluate("document.body.scrollHeight");
-        if (newHeight === lastHeight) break;
-      }
-
-      return results.slice(0, limit);
-    })();
-
->>>>>>> 109133f4b340b67879d151ea98f520ade7b710a3
     const keywordResults = await task;
     postResults.push(...keywordResults);
     totalResults = postResults.length;

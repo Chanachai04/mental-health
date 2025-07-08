@@ -43,28 +43,21 @@ async function searchInstagram(keyword, limit) {
   const context = await browser.newContext({
     storageState: cachedStorageState,
   });
-<<<<<<< HEAD
 
   const postTasks = [];
 
   // Handle multiple keywords
-  const keywords = keyword.split(",").map(k => k.trim());
+  const keywords = keyword.split(",").map((k) => k.trim());
 
   for (let i = 0; i < keywords.length; i++) {
     const currentKeyword = keywords[i];
 
     const task = (async () => {
       const page = await context.newPage();
-      const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(currentKeyword.replace("#", ""))}/`;
+      const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(
+        currentKeyword.replace("#", "")
+      )}/`;
       await page.goto(searchUrl, { waitUntil: "load" });
-=======
-  const page = await context.newPage();
-
-  const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(
-    keyword.replace("#", "")
-  )}/`;
-  await page.goto(searchUrl, { waitUntil: "load" });
->>>>>>> 109133f4b340b67879d151ea98f520ade7b710a3
 
       for (let i = 0; i < 3; i++) {
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
@@ -77,7 +70,6 @@ async function searchInstagram(keyword, limit) {
       } catch (err) {
         throw new Error("ไม่สามารถหาโพสต์บนหน้า Instagram ได้");
       }
-<<<<<<< HEAD
 
       const postElements = await page.$$(postSelector);
       console.log(`เจอโพสต์ทั้งหมด: ${postElements.length}`);
@@ -104,7 +96,7 @@ async function searchInstagram(keyword, limit) {
           // ✅ Updated caption selector
           let caption = "ไม่มี caption";
           try {
-            caption = await postPage.$eval('ul li div > div > div > span', (el) => {
+            caption = await postPage.$eval("ul li div > div > div > span", (el) => {
               let text = el.innerText || "";
               text = text.replace(/#[\w\u0E00-\u0E7F]+/g, "").trim();
               if (text.length > 200) {
@@ -130,65 +122,6 @@ async function searchInstagram(keyword, limit) {
           console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
           console.log("สาเหตุ:", err.message);
           return null;
-=======
-
-      const postElements = await page.$$(postSelector);
-      console.log(`เจอโพสต์ทั้งหมด: ${postElements.length}`);
-
-      for (const post of postElements.slice(0, limit)) {
-        const postPath = await post.getAttribute("href");
-        if (!postPath) continue;
-
-        const postUrl = "https://www.instagram.com" + postPath;
-
-        try {
-          const postPage = await context.newPage();
-          await postPage.goto(postUrl, { waitUntil: "load", timeout: 30000 });
-          await postPage.waitForTimeout(2000);
-
-        let username = "unknown";
-        try {
-          username = await postPage.$eval(
-            "span._ap3a._aaco._aacw._aacx._aad7._aade",
-            (el) => el.innerText.trim()
-          );
-        } catch {}
-
-          // ✅ Updated caption selector
-          let caption = "ไม่มี caption";
-          try {
-            caption = await postPage.$eval(
-              "ul li div > div > div > span",
-              (el) => {
-                let text = el.innerText || "";
-                text = text.replace(/#[\w\u0E00-\u0E7F]+/g, "").trim();
-                if (text.length > 200) {
-                  text = text.substring(0, 200) + "...";
-                }
-                return text;
-              }
-            );
-          } catch (e) {
-            console.warn("หา caption ไม่เจอ:", e.message);
-          }
-
-        console.log(
-          `ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
-        );
-
-        return {
-          username: username || "unknown",
-          caption: caption || "ไม่มี caption",
-          postUrl,
-        };
-      } catch (err) {
-        console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
-        console.log("สาเหตุ:", err.message);
-        return null;
-      } finally {
-        if (postPage && !postPage.isClosed()) {
-          await postPage.close();
->>>>>>> 109133f4b340b67879d151ea98f520ade7b710a3
         }
       }
     })();

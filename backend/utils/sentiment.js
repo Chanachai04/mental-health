@@ -11,30 +11,39 @@ async function analyzeSentiment(message) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: message }),
+      timeout: 10000, // เพิ่ม timeout
     });
 
     if (!response.ok) throw new Error(`API error: ${response.status}`);
 
     const data = await response.json();
-    const result = data.choices?.[0]?.message?.content?.trim();
+
+    // แก้ไขการเข้าถึง sentiment data
+    const sentiment = data.sentiment;
+
+    if (!sentiment) {
+      throw new Error("No sentiment data received");
+    }
 
     // Log all available sentiment data
-    // console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
-    // console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
-    // console.log("VADER Compound Score:", sentiment.vader?.compound);
-    // console.log("VADER All Scores:", sentiment.vader);
+    console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
+    console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
+    console.log("VADER Compound Score:", sentiment.vader?.compound);
+    console.log("VADER All Scores:", sentiment.vader);
 
     // Example decision logic
-    if (sentiment.vader?.compound >= 0) {
+    if (sentiment.vader?.compound >= 0.05) {
       return "ความคิดเห็นเชิงบวก";
-    } else if (sentiment.vader?.compound < 0) {
+    } else if (sentiment.vader?.compound <= -0.05) {
       return "ความคิดเห็นเชิงลบ";
     } else {
-      return "ไม่สามารถระบุได้";
+      return "ความคิดเห็นเป็นกลาง";
     }
   } catch (err) {
     console.error("Sentiment API error:", err.message);
-    return "ไม่สามารถระบุได้";
+
+    // Fallback: Simple keyword-based sentiment analysis
+    return fallbackSentimentAnalysis(message);
   }
 }
 
