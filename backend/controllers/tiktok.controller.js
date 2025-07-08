@@ -418,11 +418,8 @@ async function handleSearch(req, res) {
         return res.json(response);
       } catch (error) {
         lastError = error;
-        console.log(`Attempt ${attempt}/${CONFIG.MAX_RETRIES} failed: ${error.message}`);
-
         if (attempt < CONFIG.MAX_RETRIES) {
           const backoffTime = Math.min(1000 * Math.pow(2, attempt), 10000);
-          console.log(`Waiting ${backoffTime}ms before retry...`);
           await sleep(backoffTime);
         }
       }

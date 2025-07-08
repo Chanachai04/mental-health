@@ -7,7 +7,7 @@ function DashboardPage() {
 
   // ดึงข้อมูลจาก API
   useEffect(() => {
-    fetch("http://localhost:3000/api/info")
+    fetch("http://119.59.118.120:3000/api/info")
       .then((res) => res.json())
       .then((data) => setData(data))
       .catch((err) => console.error("Failed to fetch data:", err));

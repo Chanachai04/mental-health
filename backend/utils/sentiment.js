@@ -1,7 +1,7 @@
 require("dotenv").config();
 const fetch = require("node-fetch");
 
-const API_URL = process.env.SENTIMENT_API_URL || "http://localhost:5000/sentiment";
+const API_URL = process.env.SENTIMENT_API_URL || "http://119.59.118.120:5000/sentiment";
 
 async function analyzeSentiment(message) {
   if (!message || message.trim() === "") return "ไม่สามารถระบุได้";
@@ -19,10 +19,10 @@ async function analyzeSentiment(message) {
     const sentiment = data?.sentiment;
 
     // Log all available sentiment data
-    console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
-    console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
-    console.log("VADER Compound Score:", sentiment.vader?.compound);
-    console.log("VADER All Scores:", sentiment.vader);
+    // console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
+    // console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
+    // console.log("VADER Compound Score:", sentiment.vader?.compound);
+    // console.log("VADER All Scores:", sentiment.vader);
 
     // Example decision logic
     if (sentiment.vader?.compound >= 0) {

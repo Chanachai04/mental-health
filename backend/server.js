@@ -18,7 +18,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use("/api/facebook", facebookRoutes);
 app.use("/api/twitter", twitterRoutes);
@@ -59,6 +59,5 @@ app.get("/api/info", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`LM Studio URL: ${process.env.LM_STUDIO_URL}`);
+  console.log(`Server running on http://119.59.118.120:${PORT}`);
 });
