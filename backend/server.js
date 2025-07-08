@@ -31,14 +31,12 @@ app.post("/api/save", async (req, res) => {
   try {
     // ตรวจสอบว่า caption หรือ baseurl ซ้ำหรือไม่
     const [rows] = await pool.query(
-      `SELECT 1 FROM mental_health WHERE caption = ? AND baseurl = ? LIMIT 1`,
+      `SELECT 1 FROM mental_health WHERE baseurl = ? LIMIT 1`,
       [caption, baseurl]
     );
 
     if (rows.length > 0) {
-      return res
-        .status(409)
-        .json({ error: "Duplicate caption and baseurl entry" });
+      return res.status(409).json({ error: "Duplicate baseurl entry" });
     }
 
     // ถ้าไม่ซ้ำ → insert ได้เลย

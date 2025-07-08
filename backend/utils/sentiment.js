@@ -1,49 +1,54 @@
 require("dotenv").config();
-const fetch = require("node-fetch");
+const axios = require("axios");
 
-const API_URL = process.env.SENTIMENT_API_URL || "http://119.59.118.120:5000/sentiment";
+const API_URL =
+  process.env.SENTIMENT_API_URL || "http://119.59.118.120:5000/sentiment";
 
 async function analyzeSentiment(message) {
   if (!message || message.trim() === "") return "ไม่สามารถระบุได้";
 
   try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: message }),
-      timeout: 10000, // เพิ่ม timeout
-    });
+    const response = await axios.post(
+      API_URL,
+      { text: message },
+      {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000, // 10 วินาที
+      }
+    );
 
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
-
-    const data = await response.json();
-
-    // แก้ไขการเข้าถึง sentiment data
-    const sentiment = data.sentiment;
+    const sentiment = response.data?.sentiment;
 
     if (!sentiment) {
-      throw new Error("No sentiment data received");
+      throw new Error("ไม่มีข้อมูล sentiment กลับมา");
     }
 
+    const compound = sentiment.vader?.compound;
     // Log all available sentiment data
-    console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
-    console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
-    console.log("VADER Compound Score:", sentiment.vader?.compound);
+    // console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
+    // console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
+    // console.log("VADER Compound Score:", sentiment.vader?.compound);
     console.log("VADER All Scores:", sentiment.vader);
 
-    // Example decision logic
-    if (sentiment.vader?.compound >= 0.05) {
+    if (compound >= 0.05) {
       return "ความคิดเห็นเชิงบวก";
-    } else if (sentiment.vader?.compound <= -0.05) {
+    } else if (compound <= -0.05) {
       return "ความคิดเห็นเชิงลบ";
     } else {
       return "ความคิดเห็นเป็นกลาง";
     }
   } catch (err) {
-    console.error("Sentiment API error:", err.message);
+    if (err.code === "ECONNABORTED") {
+      console.error("เชื่อมต่อ API ไม่ทันเวลา (timeout)");
+    } else if (err.response) {
+      console.error(
+        `API ส่งกลับ error: ${err.response.status} - ${err.response.statusText}`
+      );
+    } else {
+      console.error("Sentiment API error:", err.message);
+    }
 
-    // Fallback: Simple keyword-based sentiment analysis
-    return fallbackSentimentAnalysis(message);
+    return "ไม่สามารถวิเคราะห์ข้อความได้";
   }
 }
 

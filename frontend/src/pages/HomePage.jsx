@@ -3,37 +3,30 @@ import { Search, Hash, Loader2, ChartLine } from "lucide-react";
 
 function HomePage() {
   const [keyword, setKeyword] = useState("");
-  // intervalMin now controls the frequency of search (every X minutes)
   const [intervalMin, setIntervalMin] = useState(5);
   const [loading, setLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [allResults, setAllResults] = useState([]);
-  const [message, setMessage] = useState({ text: "", type: "" }); // State for displaying messages
-  const baseSearchAmount = 10;
-  const [searchLimit, setSearchLimit] = useState(baseSearchAmount); // New state for increasing search limit
+  const [message, setMessage] = useState({ text: "", type: "" });
+  const baseSearchAmount = 45;
+  const [searchLimit, setSearchLimit] = useState(baseSearchAmount);
 
-  const allResultsRef = useRef([]); // Ref to hold all results for the current session
-  const uniquePostIdsRef = useRef(new Set()); // Ref to store unique identifiers (e.g., platform-url)
-  const intervalIdRef = useRef(null); // Ref to hold the interval ID for clearing
-  const messageTimeoutRef = useRef(null); // Ref to clear message timeout
+  const allResultsRef = useRef([]);
+  const intervalIdRef = useRef(null);
+  const messageTimeoutRef = useRef(null);
 
-  const platforms = ["instagram", "twitter", "tiktok"];
-  // const platforms = ["facebook", "instagram", "twitter", "tiktok"];
+  const platforms = ["twitter", "tiktok"];
 
-  // Helper function to display messages in the UI
   const displayMessage = (text, type = "info") => {
     setMessage({ text, type });
-    // Clear any existing message timeout
     if (messageTimeoutRef.current) {
       clearTimeout(messageTimeoutRef.current);
     }
-    // Set a new timeout to clear the message after 5 seconds
     messageTimeoutRef.current = setTimeout(() => {
       setMessage({ text: "", type: "" });
     }, 5000);
   };
 
-  // Effect to clear message timeout on unmount
   useEffect(() => {
     return () => {
       if (messageTimeoutRef.current) {
@@ -42,87 +35,46 @@ function HomePage() {
     };
   }, []);
 
-  /**
-   * Generates a unique ID for a post.
-   * Prioritizes baseurl for uniqueness, falls back to a combination of platform, username, and caption.
-   * @param {Object} post - The post object.
-   * @returns {string} A unique identifier string for the post.
-   */
-  const getUniquePostId = (post) => {
-    // If baseurl exists, it's the most reliable unique identifier.
-    if (post.baseurl) {
-      return `${post.platform}-${post.baseurl}`;
-    }
-    // Fallback for posts without a reliable URL: combine platform, username, and caption.
-    // This is less robust but better than nothing for uniqueness.
-    return `${post.platform}-${post.username}-${post.caption}`;
-  };
-
-  /**
-   * Starts the continuous search process.
-   * Calls doSearch immediately and then sets up an interval for repeated searches.
-   */
   const startSearch = () => {
     if (!keyword.trim()) {
       displayMessage("Please enter a search keyword.", "error");
       return;
     }
 
-    // Reset uniquePostIds for a new search session
-    uniquePostIdsRef.current.clear();
-    setAllResults([]); // Clear previous results display
-    allResultsRef.current = []; // Clear previous results in ref
-    setSearchLimit(baseSearchAmount); // Reset search limit when starting a new search
-
+    setAllResults([]);
+    allResultsRef.current = [];
+    setSearchLimit(baseSearchAmount);
     setIsSearching(true);
     displayMessage("Starting search...", "info");
-    doSearch(); // Perform an initial search immediately
+    doSearch();
 
-    // Set up an interval to perform the search every 'intervalMin' minutes
-    // The search will continue until explicitly stopped by the user.
     intervalIdRef.current = setInterval(doSearch, intervalMin * 60 * 1000);
   };
 
-  /**
-   * Stops the continuous search process.
-   * Clears the interval and attempts to save collected unique data.
-   */
   const stopSearch = async () => {
     setIsSearching(false);
     displayMessage("Stopping search...", "info");
 
-    // Clear the interval if it's running
     if (intervalIdRef.current) {
       clearInterval(intervalIdRef.current);
       intervalIdRef.current = null;
     }
 
-    // Give a brief moment for any ongoing fetches/saves to potentially finish
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Data has been saved incrementally by doSearch.
-    // Just clear the states for the next session.
     if (allResultsRef.current.length > 0) {
       displayMessage(
-        `Search stopped. ${allResultsRef.current.length} unique items were collected and saved during this session.`,
+        `Search stopped. ${allResultsRef.current.length} items were collected and saved.`,
         "success"
       );
     } else {
-      displayMessage(
-        "Search stopped. No new unique data was found or saved during this session.",
-        "info"
-      );
+      displayMessage("Search stopped. No data was collected.", "info");
     }
-    setAllResults([]); // Clear displayed results
-    allResultsRef.current = []; // Clear ref for next session
-    uniquePostIdsRef.current.clear(); // Clear unique IDs for next session
+
+    setAllResults([]);
+    allResultsRef.current = [];
   };
 
-  /**
-   * Performs the actual search operation across all defined platforms.
-   * Fetches data, filters for uniqueness, and updates the results state.
-   * Posts are saved to the API as soon as they are found to be unique.
-   */
   const doSearch = async () => {
     if (!keyword.trim()) {
       displayMessage("Search keyword is empty. Stopping search.", "error");
@@ -130,56 +82,50 @@ function HomePage() {
       return;
     }
 
-    setLoading(true); // Indicate loading state for the search operation
-    let newlyFoundUniqueResults = [];
+    setLoading(true);
+    let newlyFoundResults = [];
 
     try {
       const fetchPromises = platforms.map(async (platform) => {
-        // Fetch data from each platform's API endpoint
-        const res = await fetch(
-          `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(
-            keyword
-          )}&limit=${searchLimit}` // Use the increasing searchLimit
-        );
-        const data = await res.json();
-        console.log(data.results);
-        // Map the received data to a consistent structure
-        const results = data.results.map((r) => ({
-          username: r.username || "anonymous",
-          caption: r.caption || "",
-          platform,
-          baseurl: r.postUrl || r.videoUrl || "",
-        }));
+        try {
+          const res = await fetch(
+            `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(
+              keyword
+            )}&limit=${searchLimit}`
+          );
 
-        return results;
-      });
+          if (!res.ok) return [];
 
-      // Wait for all platform fetches to complete
-      const allPlatformResults = await Promise.all(fetchPromises);
-      // Flatten the array of arrays into a single array of results
-      const mergedResults = allPlatformResults.flat();
+          const data = await res.json();
+          console.log(data.results);
+          const results =
+            data.results?.map((r) => ({
+              username: r.username || "anonymous",
+              caption: r.caption || "",
+              platform,
+              baseurl: r.postUrl || r.videoUrl || "",
+            })) || [];
 
-      // Filter for unique results before adding to state and ref
-      mergedResults.forEach((result) => {
-        const uniqueId = getUniquePostId(result);
-        if (!uniquePostIdsRef.current.has(uniqueId)) {
-          uniquePostIdsRef.current.add(uniqueId);
-          newlyFoundUniqueResults.push(result);
+          return results;
+        } catch {
+          return [];
         }
       });
 
-      // Only update and save if new unique results were found
-      if (newlyFoundUniqueResults.length > 0) {
-        setAllResults((prev) => [...prev, ...newlyFoundUniqueResults]);
+      const allPlatformResults = await Promise.all(fetchPromises);
+      const mergedResults = allPlatformResults.flat();
+      newlyFoundResults = mergedResults;
+
+      if (newlyFoundResults.length > 0) {
+        setAllResults((prev) => [...prev, ...newlyFoundResults]);
         allResultsRef.current = [
           ...allResultsRef.current,
-          ...newlyFoundUniqueResults,
+          ...newlyFoundResults,
         ];
 
-        let savedNewlyFoundCount = 0;
-        for (const result of newlyFoundUniqueResults) {
+        let savedCount = 0;
+        for (const result of newlyFoundResults) {
           try {
-            // Attempt to save each newly found unique post immediately
             const response = await fetch(
               "http://119.59.118.120:3000/api/save",
               {
@@ -190,40 +136,29 @@ function HomePage() {
             );
 
             if (response.ok) {
-              savedNewlyFoundCount++;
-            } else {
-              console.error(
-                "Failed to save newly found post:",
-                await response.text()
-              );
+              savedCount++;
             }
-          } catch (saveError) {
-            console.error("Error saving newly found post:", saveError);
+          } catch (err) {
+            console.error("Error saving:", err);
           }
         }
+
         displayMessage(
-          `Found ${newlyFoundUniqueResults.length} new unique posts and saved ${savedNewlyFoundCount}. Total unique posts this session: ${allResultsRef.current.length}`,
+          `Found ${newlyFoundResults.length} posts and saved ${savedCount}. Total this session: ${allResultsRef.current.length}`,
           "success"
         );
       } else {
-        displayMessage("No new unique posts found in this interval.", "info");
+        displayMessage("No posts found in this interval.", "info");
       }
     } catch (err) {
       console.error("Search error:", err);
       displayMessage("Error during search: " + err.message, "error");
-      // Consider stopping search if a critical error occurs consistently
-      // stopSearch();
     } finally {
-      setLoading(false); // End loading state
-      // Increment the search limit for the next loop
+      setLoading(false);
       setSearchLimit((prevLimit) => prevLimit + prevLimit);
     }
   };
 
-  /**
-   * Handles the click event on the main search/stop button.
-   * Toggles between starting and stopping the search.
-   */
   const handleSearchClick = () => {
     if (isSearching) {
       stopSearch();
@@ -243,19 +178,18 @@ function HomePage() {
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mt-2">
           Mahidol University
         </h1>
-        <p className="text-base sm:text-xl text-gray-600 mt-2 ">
+        <p className="text-base sm:text-xl text-gray-600 mt-2">
           Application of Natural Language Processing to Study the Impact of
           Social Media on Mental Health in Children And Adolescents
         </p>
       </div>
 
       <div className="w-full max-w-2xl mx-auto">
-        <div className=" space-y-6 bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-gray-200">
+        <div className="space-y-6 bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-gray-200">
           <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
             Social Media Searcher
           </h1>
 
-          {/* Message Display Area */}
           {message.text && (
             <div
               className={`mt-4 p-3 rounded-xl text-center font-medium ${
@@ -285,7 +219,7 @@ function HomePage() {
               onChange={(e) => setKeyword(e.target.value)}
               className="w-full border px-4 py-3 rounded-xl border-gray-200 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               placeholder="e.g., #AI, new product launch"
-              disabled={isSearching} /* Disable input while searching */
+              disabled={isSearching}
             />
           </div>
 
@@ -299,11 +233,11 @@ function HomePage() {
             <input
               id="interval-input"
               type="number"
-              min={1} // Minimum interval of 1 minute
+              min={1}
               value={intervalMin}
               onChange={(e) => setIntervalMin(Number(e.target.value))}
               className="w-full border px-4 py-3 rounded-xl border-gray-200 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              disabled={isSearching} /* Disable input while searching */
+              disabled={isSearching}
             />
           </div>
 
@@ -317,7 +251,7 @@ function HomePage() {
             }
             ${loading ? "opacity-70 cursor-not-allowed" : ""}
           `}
-            disabled={loading} // Disable button when loading to prevent multiple clicks
+            disabled={loading}
           >
             {loading ? (
               <>
