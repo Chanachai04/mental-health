@@ -28,7 +28,7 @@ async function analyzeSentiment(message) {
     // console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
     // console.log("TextBlob Subjectivity:", sentiment.textblob?.subjectivity);
     // console.log("VADER Compound Score:", sentiment.vader?.compound);
-    console.log("VADER All Scores:", sentiment.vader);
+    // console.log("VADER All Scores:", sentiment.vader);
 
     if (compound >= 0.05) {
       return "ความคิดเห็นเชิงบวก";

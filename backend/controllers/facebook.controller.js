@@ -25,11 +25,9 @@ async function loginAndCacheSession() {
   await context.close();
 }
 
-async function searchFacebook(keyword, limit) {
-  const browser = await chromium.launch({
-    headless: true,
-    slowMo: 100,
-  });
+async function searchFacebook(keyword, limitRaw) {
+  const limit = parseInt(limitRaw);
+  const browser = await chromium.launch({ headless: true, slowMo: 100 });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
     cachedStorageState = JSON.parse(
@@ -40,44 +38,60 @@ async function searchFacebook(keyword, limit) {
 
   if (!cachedStorageState) {
     await loginAndCacheSession();
+    throw new Error("ยังไม่ได้ล็อกอิน Facebook");
   }
 
   const context = await browser.newContext({
     storageState: cachedStorageState,
   });
 
-  const postResults = [];
   const keywords = keyword.split(",").map((k) => k.trim());
-  const totalKeywords = keywords.length;
-
-  let totalResults = 0;
+  const seenUrls = new Set();
+  const postResults = [];
   let keywordIndex = 0;
 
-  // Keep searching until the limit is reached
-  while (totalResults < limit) {
+  while (postResults.length < limit) {
     const currentKeyword = keywords[keywordIndex];
 
-    const task = (async () => {
-      const page = await context.newPage();
-      const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(
-        currentKeyword
-      )}&filters=eyJyZWNlbnRfcG9zdHM6MCI6IntcIm5hbWVcIjpcInJlY2VudF9wb3N0c1wiLFwiYXJnc1wiOlwiXCJ9In0%3D`;
-      await page.goto(searchUrl, { waitUntil: "load" });
+    const page = await context.newPage();
+    const filterBase64 = btoa(
+      JSON.stringify({
+        "recent_posts:0": JSON.stringify({
+          name: "recent_posts",
+          args: "",
+        }),
+      })
+    );
+    const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(
+      currentKeyword
+    )}&filters=${encodeURIComponent(filterBase64)}`;
 
+    await page.goto(searchUrl, { waitUntil: "load" });
+
+    try {
       await page.waitForSelector('[role="article"]', { timeout: 10000 });
+    } catch (err) {
+      console.warn(`ไม่เจอโพสต์สำหรับ keyword "${currentKeyword}"`);
+      await page.close();
+      keywordIndex = (keywordIndex + 1) % keywords.length;
+      continue;
+    }
 
-      const results = [];
-      let lastHeight = 0;
+    let scrolls = 0;
+    let scrollCount = 0;
+    while (postResults.length < limit) {
+      const posts = await page.$$('[role="article"]');
+      scrollCount++;
+      console.log(`รอบที่ ${scrollCount} Facebook : พบ ${posts.length} โพสต์`);
+      for (const post of posts) {
+        if (postResults.length >= limit) break;
 
-      // Scroll and collect posts until the limit is met
-      while (results.length < limit && results.length + totalResults < limit) {
-        const posts = await page.$$('[role="article"]');
+        let username = "unknown";
+        let caption = "";
+        let postUrl = "";
 
-        for (const post of posts) {
-          if (results.length >= limit || results.length + totalResults >= limit)
-            break;
-
-          const username =
+        try {
+          let rawUsername =
             (await post
               .$eval("strong a", (el) => el.innerText)
               .catch(() => null)) ||
@@ -87,49 +101,73 @@ async function searchFacebook(keyword, limit) {
             (await post
               .$eval('div[dir="auto"] span', (el) => el.innerText)
               .catch(() => "unknown"));
-
-          const caption = await post
+          let rawCaption = await post
             .$eval('div[dir="auto"]', (el) => el.innerText)
             .catch(() => "unknown");
-          const postUrl = await post
-            .$eval('a[tabindex="0"]', (a) => a.href)
-            .catch(() => "unknown");
 
-          if (caption !== "unknown") {
-            const sentimentResult = await analyzeSentiment(caption);
-            if (sentimentResult === "ความคิดเห็นเชิงลบ") {
-              if (!results.some((r) => r.postUrl === postUrl)) {
-                results.push({
-                  username,
-                  caption,
-                  postUrl,
-                  analyzeSentiment: sentimentResult,
-                });
-              }
-            }
-          }
+          username = rawUsername
+            .replace(/\n/g, " ")
+            .replace(/·.*$/, "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          caption = rawCaption
+            .replace(/…\s*ดูเพิ่มเติม/g, "")
+            .replace(/\s*ดูเพิ่มเติม/g, "")
+            .replace(/\n/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          postUrl = await post
+            .$eval('a[tabindex="0"]', (a) => a.href)
+            .catch(() => null);
+        } catch (e) {
+          continue;
         }
 
-        lastHeight = await page.evaluate("document.body.scrollHeight");
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-        await page.waitForTimeout(2000);
+        if (caption !== "unknown" && postUrl && !seenUrls.has(postUrl)) {
+          seenUrls.add(postUrl);
 
-        const newHeight = await page.evaluate("document.body.scrollHeight");
-        if (newHeight === lastHeight) break;
+          try {
+            const sentimentResult = await analyzeSentiment(caption);
+            if (sentimentResult === "ความคิดเห็นเชิงลบ") {
+              postResults.push({
+                username,
+                caption,
+                postUrl,
+                analyzeSentiment: sentimentResult,
+              });
+              console.log(
+                `เก็บโพสต์ Facebook เชิงลบได้ ${postResults.length}/${limit}`
+              );
+            }
+          } catch (e) {
+            console.warn("sentiment error:", e);
+          }
+        }
       }
 
-      return results.slice(0, limit);
-    })();
+      const lastHeight = await page.evaluate("document.body.scrollHeight");
+      await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
+      await page.waitForTimeout(5000);
+      const newHeight = await page.evaluate("document.body.scrollHeight");
 
-    const keywordResults = await task;
-    postResults.push(...keywordResults);
-    totalResults = postResults.length;
+      if (newHeight === lastHeight) {
+        console.log("หมดเนื้อหาให้ scroll ของ Tiktok แล้ว");
+        break;
+      }
 
-    // Switch to the next keyword
-    keywordIndex = (keywordIndex + 1) % totalKeywords;
+      scrolls++;
+    }
 
-    // If we have reached the limit, break out of the loop
-    if (totalResults >= limit) break;
+    await page.close();
+
+    keywordIndex = (keywordIndex + 1) % keywords.length;
+
+    // หยุดถ้าไม่มี keyword ใหม่ให้ลองแล้ว
+    if (keywordIndex === 0 && postResults.length < limit) {
+      break;
+    }
   }
 
   await context.close();
@@ -145,7 +183,7 @@ async function handleSearch(req, res) {
   if (!q) return res.status(400).json({ error: "Missing ?q=keyword" });
 
   try {
-    const results = await searchFacebook(q, parseInt(limit) || 10);
+    const results = await searchFacebook(q, parseInt(limit));
 
     res.json({
       keyword: q,

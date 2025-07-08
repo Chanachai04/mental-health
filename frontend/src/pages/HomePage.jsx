@@ -97,7 +97,7 @@ function HomePage() {
           if (!res.ok) return [];
 
           const data = await res.json();
-          console.log(data.results);
+          console.log("Platform: ", platform, "Data: ", data.results);
           const results =
             data.results?.map((r) => ({
               username: r.username || "anonymous",

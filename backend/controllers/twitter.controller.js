@@ -34,7 +34,7 @@ async function loginAndCacheSession() {
 }
 
 async function searchTwitter(keyword, limitRaw) {
-  const limit = parseInt(limitRaw) || 10;
+  const limit = parseInt(limitRaw);
   const browser = await chromium.launch({
     headless: true,
     slowMo: 100,
@@ -60,7 +60,7 @@ async function searchTwitter(keyword, limitRaw) {
   const searchUrl = `https://x.com/search?q=${encodeURIComponent(
     keyword
   )}&src=typed_query&f=live`;
-  await page.goto(searchUrl, { waitUntil: "load" });
+  await page.goto(searchUrl, { waitUntil: "networkidle" });
 
   try {
     await page.waitForSelector('article div[data-testid="tweetText"]', {
@@ -71,19 +71,25 @@ async function searchTwitter(keyword, limitRaw) {
   }
 
   const results = [];
-  let lastHeight = 0;
+  const seenUrls = new Set();
   let scrollAttempts = 0;
-  const maxScrollAttempts = 10;
 
-  while (results.length < limit && scrollAttempts < maxScrollAttempts) {
+  while (results.length < limit) {
     const tweets = await page.$$("article");
-
+    console.log(`รอบที่ ${scrollAttempts + 1} X: พบ ${tweets.length} โพสต์`);
     for (const tweet of tweets) {
       if (results.length >= limit) break;
 
       const caption = await tweet
-        .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
+        .$eval('div[data-testid="tweetText"]', (el) => {
+          try {
+            return (el.innerText || "").replace(/[\r\n]+/g, " ").trim();
+          } catch (e) {
+            return null;
+          }
+        })
         .catch(() => null);
+
       const postUrl = await tweet
         .$eval('a[role="link"][href*="/status/"]', (el) => el.href)
         .catch(() => null);
@@ -91,7 +97,10 @@ async function searchTwitter(keyword, limitRaw) {
         .$eval('div[dir="ltr"] > span', (el) => el.innerText)
         .catch(() => "unknown");
 
-      if (caption && postUrl && !results.some((r) => r.postUrl === postUrl)) {
+      if (!caption || !postUrl || seenUrls.has(postUrl)) continue;
+      seenUrls.add(postUrl);
+
+      try {
         const sentiment = await analyzeSentiment(caption);
         if (sentiment === "ความคิดเห็นเชิงลบ") {
           results.push({
@@ -101,18 +110,23 @@ async function searchTwitter(keyword, limitRaw) {
             analyzeSentiment: sentiment,
           });
 
-          console.log(`Negative tweet found: ${caption.slice(0, 40)}...`);
+          console.log(`เก็บโพสต์ X เชิงลบได้ ${results.length}/${limit}`);
         }
+      } catch (err) {
+        console.error("Sentiment analysis error:", err);
       }
-    } // ✅ ปิด for-loop
+    }
 
-    // Scroll and wait for new content
-    lastHeight = await page.evaluate("document.body.scrollHeight");
+    const lastHeight = await page.evaluate("document.body.scrollHeight");
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(5000);
 
     const newHeight = await page.evaluate("document.body.scrollHeight");
-    if (newHeight === lastHeight) break;
+    if (newHeight === lastHeight) {
+      console.log("หมดเนื้อหาให้ scroll ของ X แล้ว");
+
+      break;
+    }
 
     scrollAttempts++;
   }
@@ -120,7 +134,7 @@ async function searchTwitter(keyword, limitRaw) {
   await context.close();
   await browser.close();
 
-  return results.slice(0, limit);
+  return results;
 }
 
 async function handleSearch(req, res) {
