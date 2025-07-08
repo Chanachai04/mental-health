@@ -133,9 +133,9 @@ function HomePage() {
     try {
       const fetchPromises = platforms.map(async (platform) => {
         // Fetch data from each platform's API endpoint
-        const res = await fetch(
-          `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(keyword)}&limit=${searchLimit}` // Use the increasing searchLimit
-        );
+        // const res = await fetch(
+        //   `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(keyword)}&limit=${searchLimit}` // Use the increasing searchLimit
+        // );
         const data = await res.json();
 
         // Map the received data to a consistent structure
@@ -172,11 +172,11 @@ function HomePage() {
         for (const result of newlyFoundUniqueResults) {
           try {
             // Attempt to save each newly found unique post immediately
-            const response = await fetch("http://119.59.118.120:3000/api/save", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(result),
-            });
+            // const response = await fetch("http://119.59.118.120:3000/api/save", {
+            //   method: "POST",
+            //   headers: { "Content-Type": "application/json" },
+            //   body: JSON.stringify(result),
+            // });
 
             if (response.ok) {
               savedNewlyFoundCount++;
@@ -307,7 +307,7 @@ function HomePage() {
           </button>
 
           <a
-            href="http://119.59.118.120:5252/"
+            // href="http://119.59.118.120:5252/"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
