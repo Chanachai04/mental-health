@@ -41,7 +41,9 @@ async function searchTwitter(keyword, limitRaw) {
   });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, "utf-8"));
+    cachedStorageState = JSON.parse(
+      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
+    );
     console.log("Loaded session from storageStateTwitter.json");
   }
 
@@ -50,14 +52,20 @@ async function searchTwitter(keyword, limitRaw) {
     throw new Error("Login required. Please retry after login.");
   }
 
-  const context = await browser.newContext({ storageState: cachedStorageState });
+  const context = await browser.newContext({
+    storageState: cachedStorageState,
+  });
   const page = await context.newPage();
 
-  const searchUrl = `https://x.com/search?q=${encodeURIComponent(keyword)}&src=typed_query&f=live`;
+  const searchUrl = `https://x.com/search?q=${encodeURIComponent(
+    keyword
+  )}&src=typed_query&f=live`;
   await page.goto(searchUrl, { waitUntil: "load" });
 
   try {
-    await page.waitForSelector('article div[data-testid="tweetText"]', { timeout: 10000 });
+    await page.waitForSelector('article div[data-testid="tweetText"]', {
+      timeout: 10000,
+    });
   } catch {
     console.warn("No tweets found or failed to load.");
   }
@@ -73,9 +81,15 @@ async function searchTwitter(keyword, limitRaw) {
     for (const tweet of tweets) {
       if (results.length >= limit) break;
 
-      const caption = await tweet.$eval('div[data-testid="tweetText"]', (el) => el.innerText).catch(() => null);
-      const postUrl = await tweet.$eval('a[role="link"][href*="/status/"]', (el) => el.href).catch(() => null);
-      const username = await tweet.$eval('div[dir="ltr"] > span', (el) => el.innerText).catch(() => "unknown");
+      const caption = await tweet
+        .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
+        .catch(() => null);
+      const postUrl = await tweet
+        .$eval('a[role="link"][href*="/status/"]', (el) => el.href)
+        .catch(() => null);
+      const username = await tweet
+        .$eval('div[dir="ltr"] > span', (el) => el.innerText)
+        .catch(() => "unknown");
 
       if (caption && postUrl && !results.some((r) => r.postUrl === postUrl)) {
         const sentiment = await analyzeSentiment(caption);

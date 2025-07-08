@@ -8,7 +8,7 @@ let cachedStorageState = null;
 async function loginAndCacheSession() {
   console.log("เปิด browser เพื่อ login Instagram...");
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     slowMo: 100,
   });
   const context = await browser.newContext();
@@ -27,12 +27,14 @@ async function loginAndCacheSession() {
 
 async function searchInstagram(keyword, limit) {
   const browser = await chromium.launch({
-    headless: true,
+    headless: false,
     slowMo: 100,
   });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, "utf-8"));
+    cachedStorageState = JSON.parse(
+      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
+    );
     console.log("โหลด session จากไฟล์ storageStateInstagram.json");
   }
 
@@ -44,21 +46,22 @@ async function searchInstagram(keyword, limit) {
     storageState: cachedStorageState,
   });
 
-  const postTasks = [];
+  const allResults = [];
 
   // Handle multiple keywords
   const keywords = keyword.split(",").map((k) => k.trim());
 
-  for (let i = 0; i < keywords.length; i++) {
-    const currentKeyword = keywords[i];
+  for (let keywordIndex = 0; keywordIndex < keywords.length; keywordIndex++) {
+    const currentKeyword = keywords[keywordIndex];
 
-    const task = (async () => {
+    try {
       const page = await context.newPage();
       const searchUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(
         currentKeyword.replace("#", "")
       )}/`;
       await page.goto(searchUrl, { waitUntil: "load" });
 
+      // Scroll to load more posts
       for (let i = 0; i < 3; i++) {
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
         await page.waitForTimeout(2000);
@@ -68,84 +71,111 @@ async function searchInstagram(keyword, limit) {
       try {
         await page.waitForSelector(postSelector, { timeout: 20000 });
       } catch (err) {
-        throw new Error("ไม่สามารถหาโพสต์บนหน้า Instagram ได้");
+        console.log(
+          `ไม่สามารถหาโพสต์บนหน้า Instagram ได้สำหรับ keyword: ${currentKeyword}`
+        );
+        continue;
       }
 
       const postElements = await page.$$(postSelector);
-      console.log(`เจอโพสต์ทั้งหมด: ${postElements.length}`);
+      console.log(
+        `เจอโพสต์ทั้งหมด: ${postElements.length} สำหรับ keyword: ${currentKeyword}`
+      );
 
-      for (const post of postElements.slice(0, limit)) {
+      // Process each post
+      const postsToProcess = postElements.slice(0, limit);
+      const postTasks = [];
+
+      for (const post of postsToProcess) {
         const postPath = await post.getAttribute("href");
         if (!postPath) continue;
 
         const postUrl = "https://www.instagram.com" + postPath;
 
-        try {
-          const postPage = await context.newPage();
-          await postPage.goto(postUrl, { waitUntil: "load", timeout: 30000 });
-          await postPage.waitForTimeout(2000);
-
-          // ✅ Updated username selector
-          let username = "unknown";
+        const postTask = (async () => {
           try {
-            username = await postPage.$eval('header a[href^="/"][role="link"] span', (el) => el.innerText.trim());
-          } catch (e) {
-            console.warn("หา username ไม่เจอ:", e.message);
-          }
+            const postPage = await context.newPage();
+            await postPage.goto(postUrl, { waitUntil: "load", timeout: 30000 });
+            await postPage.waitForTimeout(2000);
 
-          // ✅ Updated caption selector
-          let caption = "ไม่มี caption";
-          try {
-            caption = await postPage.$eval("ul li div > div > div > span", (el) => {
-              let text = el.innerText || "";
-              text = text.replace(/#[\w\u0E00-\u0E7F]+/g, "").trim();
-              if (text.length > 200) {
-                text = text.substring(0, 200) + "...";
-              }
-              return text;
-            });
-          } catch (e) {
-            console.warn("หา caption ไม่เจอ:", e.message);
-          }
+            // Get username
+            let username = "unknown";
+            try {
+              username = await postPage.$eval(
+                'header a[href^="/"][role="link"] span',
+                (el) => el.innerText.trim()
+              );
+            } catch (e) {
+              console.warn("หา username ไม่เจอ:", e.message);
+            }
 
-          console.log(`ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`);
-          const sentimentResult = await analyzeSentiment(caption);
-          if (sentimentResult === "ความคิดเห็นเชิงลบ") {
-            return {
-              username: username || "unknown",
-              caption: caption || "ไม่มี caption",
-              postUrl,
-              analyzeSentiment: sentimentResult,
-            };
+            // Get caption
+            let caption = "ไม่มี caption";
+            try {
+              caption = await postPage.$eval(
+                "ul li div > div > div > span",
+                (el) => {
+                  let text = el.innerText || "";
+                  text = text.replace(/#[\w\u0E00-\u0E7F]+/g, "").trim();
+                  if (text.length > 200) {
+                    text = text.substring(0, 200) + "...";
+                  }
+                  return text;
+                }
+              );
+            } catch (e) {
+              console.warn("หา caption ไม่เจอ:", e.message);
+            }
+
+            console.log(
+              `ดึงข้อมูลสำเร็จ: ${username} - ${caption.substring(0, 50)}...`
+            );
+            const sentimentResult = await analyzeSentiment(caption);
+
+            await postPage.close();
+            if (sentimentResult === "ความคิดเห็นเชิงลบ") {
+              return {
+                username: username || "unknown",
+                caption: caption || "ไม่มี caption",
+                postUrl,
+                analyzeSentiment: sentimentResult,
+              };
+            }
+          } catch (err) {
+            console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
+            console.log("สาเหตุ:", err.message);
+            return null;
           }
-        } catch (err) {
-          console.log(`โหลดโพสต์ล้มเหลว: ${postUrl}`);
-          console.log("สาเหตุ:", err.message);
-          return null;
+        })();
+
+        postTasks.push(postTask);
+      }
+
+      // Wait for all post tasks to complete
+      console.log(
+        `กำลังดึงข้อมูลจาก Instagram สำหรับ keyword: ${currentKeyword}...`
+      );
+      const postResults = await Promise.allSettled(postTasks);
+
+      for (const result of postResults) {
+        if (result.status === "fulfilled" && result.value) {
+          allResults.push(result.value);
         }
       }
-    })();
 
-    postTasks.push(task);
-  }
-
-  console.log("กำลังดึงข้อมูลจาก Instagram...");
-  const postResults = await Promise.allSettled(postTasks);
-  const results = [];
-
-  for (const r of postResults) {
-    if (r.status === "fulfilled" && r.value) {
-      results.push({ ...r.value });
+      await page.close();
+    } catch (err) {
+      console.error(`Error processing keyword ${currentKeyword}:`, err);
     }
   }
 
   await context.close();
   await browser.close();
 
-  return results.slice(0, limit);
+  return allResults.slice(0, limit);
 }
 
-// ✅ Express route handler
+// Express route handler
 async function handleSearch(req, res) {
   const { q, limit } = req.query;
 
@@ -165,7 +195,6 @@ async function handleSearch(req, res) {
   }
 }
 
-// ✅ Export both
 module.exports = {
   searchInstagram,
   handleSearch,

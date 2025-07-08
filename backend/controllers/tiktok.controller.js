@@ -107,7 +107,8 @@ class BrowserSessionManager {
       viewport,
       userAgent: getRandomElement(USER_AGENTS),
       extraHTTPHeaders: {
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",
@@ -152,7 +153,9 @@ class BrowserSessionManager {
   }
 
   async closeAllSessions() {
-    const closePromises = Array.from(this.activeSessions.keys()).map((sessionId) => this.closeSession(sessionId));
+    const closePromises = Array.from(this.activeSessions.keys()).map(
+      (sessionId) => this.closeSession(sessionId)
+    );
     await Promise.allSettled(closePromises);
   }
 }
@@ -169,7 +172,9 @@ class TikTokScraper {
     let sessionId = null;
 
     try {
-      console.log(`[${++this.requestCount}] Searching: "${keyword}" (limit: ${limit})`);
+      console.log(
+        `[${++this.requestCount}] Searching: "${keyword}" (limit: ${limit})`
+      );
 
       const session = await sessionManager.createSession();
       sessionId = session.sessionId;
@@ -198,21 +203,32 @@ class TikTokScraper {
 
   async performSearch(page, keyword, limit) {
     try {
-      await page.waitForSelector('[data-testid="search-icon"], [aria-label*="Search"]', {
-        timeout: 10000,
-      });
+      await page.waitForSelector(
+        '[data-testid="search-icon"], [aria-label*="Search"]',
+        {
+          timeout: 10000,
+        }
+      );
 
       await page.click('[data-testid="search-icon"], [aria-label*="Search"]');
 
-      await page.waitForSelector('input[placeholder*="Search"], [data-testid="search-input"]', {
-        timeout: 5000,
-      });
+      await page.waitForSelector(
+        'input[placeholder*="Search"], [data-testid="search-input"]',
+        {
+          timeout: 5000,
+        }
+      );
 
-      await page.fill('input[placeholder*="Search"], [data-testid="search-input"]', keyword);
+      await page.fill(
+        'input[placeholder*="Search"], [data-testid="search-input"]',
+        keyword
+      );
       await page.keyboard.press("Enter");
     } catch (error) {
       console.log("Using direct URL navigation");
-      const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(keyword)}`;
+      const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(
+        keyword
+      )}`;
       await page.goto(searchUrl, {
         waitUntil: "domcontentloaded",
         timeout: CONFIG.TIMEOUT,
@@ -270,7 +286,7 @@ class TikTokScraper {
   }
 
   async extractWithMainSelectors(page, limit) {
-    return await page.evaluate((maxResults) => {
+    const rawResults = await page.evaluate((maxResults) => {
       function extractUsernameFromUrl(url) {
         if (!url) return "Unknown user";
 
@@ -307,7 +323,9 @@ class TikTokScraper {
 
             const username = extractUsernameFromUrl(videoUrl);
 
-            const captionElement = element.querySelector('[data-testid="caption"], [class*="caption"]');
+            const captionElement = element.querySelector(
+              '[data-testid="caption"], [class*="caption"]'
+            );
             let caption = "";
             if (captionElement) {
               caption = captionElement.textContent?.trim() || "";
@@ -315,13 +333,16 @@ class TikTokScraper {
               const textElements = element.querySelectorAll("*");
               for (const textEl of textElements) {
                 const text = textEl.textContent?.trim() || "";
-                if (text.length > 10 && text.length < 300 && !text.startsWith("@")) {
+                if (
+                  text.length > 10 &&
+                  text.length < 300 &&
+                  !text.startsWith("@")
+                ) {
                   caption = text;
                   break;
                 }
               }
             }
-            // ลบการเรียก analyzeSentiment ออกจากส่วนนี้
 
             return {
               username: username,
@@ -329,15 +350,37 @@ class TikTokScraper {
               postUrl: videoUrl,
             };
           } catch (error) {
-            return null;
+            return console.log("Errror: ", error);
           }
         })
         .filter((item) => item !== null);
     }, limit);
+
+    // เพิ่ม sentiment analysis สำหรับผลลัพธ์
+    const resultsWithSentiment = await Promise.all(
+      rawResults.map(async (result) => {
+        try {
+          const sentiment = await analyzeSentiment(result.caption);
+          if (sentiment === "ความคิดเห็นเชิงลบ") {
+            return {
+              ...result,
+              analyzeSentiment: sentiment,
+            };
+          }
+        } catch (error) {
+          console.warn(
+            `Failed to analyze sentiment for caption: ${result.caption}`,
+            error
+          );
+        }
+      })
+    );
+
+    return resultsWithSentiment;
   }
 
   async extractWithFallbackSelectors(page, limit) {
-    return await page.evaluate((maxResults) => {
+    const rawResults = await page.evaluate((maxResults) => {
       function extractUsernameFromUrl(url) {
         if (!url) return "Unknown user";
         try {
@@ -354,17 +397,40 @@ class TikTokScraper {
       const links = Array.from(document.querySelectorAll('a[href*="/video/"]'));
 
       return links.slice(0, maxResults).map((link, index) => {
-        const container = link.closest("div, article, section") || link.parentElement;
+        const container =
+          link.closest("div, article, section") || link.parentElement;
         const text = container ? container.textContent?.trim() || "" : "";
         const username = extractUsernameFromUrl(link.href);
-
         return {
           username: username,
-          caption: text.length > 10 ? text.substring(0, 200) : "No caption available",
+          caption:
+            text.length > 10 ? text.substring(0, 200) : "No caption available",
           postUrl: link.href,
         };
       });
     }, limit);
+
+    // เพิ่ม sentiment analysis สำหรับผลลัพธ์
+    const resultsWithSentiment = await Promise.all(
+      rawResults.map(async (result) => {
+        try {
+          const sentiment = await analyzeSentiment(result.caption);
+          if (sentiment === "ความคิดเห็นเชิงลบ") {
+            return {
+              ...result,
+              analyzeSentiment: sentiment,
+            };
+          }
+        } catch (error) {
+          console.warn(
+            `Failed to analyze sentiment for caption: ${result.caption}`,
+            error
+          );
+        }
+      })
+    );
+
+    return resultsWithSentiment;
   }
 }
 

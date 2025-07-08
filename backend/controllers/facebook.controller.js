@@ -32,7 +32,9 @@ async function searchFacebook(keyword, limit) {
   });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
-    cachedStorageState = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, "utf-8"));
+    cachedStorageState = JSON.parse(
+      fs.readFileSync(STORAGE_STATE_PATH, "utf-8")
+    );
     console.log("โหลด session จากไฟล์ storageStateFacebook.json");
   }
 
@@ -57,7 +59,9 @@ async function searchFacebook(keyword, limit) {
 
     const task = (async () => {
       const page = await context.newPage();
-      const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(currentKeyword)}`;
+      const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(
+        currentKeyword
+      )}&filters=eyJyZWNlbnRfcG9zdHM6MCI6IntcIm5hbWVcIjpcInJlY2VudF9wb3N0c1wiLFwiYXJnc1wiOlwiXCJ9In0%3D`;
       await page.goto(searchUrl, { waitUntil: "load" });
 
       await page.waitForSelector('[role="article"]', { timeout: 10000 });
@@ -70,15 +74,26 @@ async function searchFacebook(keyword, limit) {
         const posts = await page.$$('[role="article"]');
 
         for (const post of posts) {
-          if (results.length >= limit || results.length + totalResults >= limit) break;
+          if (results.length >= limit || results.length + totalResults >= limit)
+            break;
 
           const username =
-            (await post.$eval("strong a", (el) => el.innerText).catch(() => null)) ||
-            (await post.$eval("h3 a, h3 span", (el) => el.innerText).catch(() => null)) ||
-            (await post.$eval('div[dir="auto"] span', (el) => el.innerText).catch(() => "unknown"));
+            (await post
+              .$eval("strong a", (el) => el.innerText)
+              .catch(() => null)) ||
+            (await post
+              .$eval("h3 a, h3 span", (el) => el.innerText)
+              .catch(() => null)) ||
+            (await post
+              .$eval('div[dir="auto"] span', (el) => el.innerText)
+              .catch(() => "unknown"));
 
-          const caption = await post.$eval('div[dir="auto"]', (el) => el.innerText).catch(() => "unknown");
-          const postUrl = await post.$eval('a[tabindex="0"]', (a) => a.href).catch(() => "unknown");
+          const caption = await post
+            .$eval('div[dir="auto"]', (el) => el.innerText)
+            .catch(() => "unknown");
+          const postUrl = await post
+            .$eval('a[tabindex="0"]', (a) => a.href)
+            .catch(() => "unknown");
 
           if (caption !== "unknown") {
             const sentimentResult = await analyzeSentiment(caption);
