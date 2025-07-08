@@ -107,7 +107,8 @@ class BrowserSessionManager {
       viewport,
       userAgent: getRandomElement(USER_AGENTS),
       extraHTTPHeaders: {
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",
@@ -152,7 +153,9 @@ class BrowserSessionManager {
   }
 
   async closeAllSessions() {
-    const closePromises = Array.from(this.activeSessions.keys()).map((sessionId) => this.closeSession(sessionId));
+    const closePromises = Array.from(this.activeSessions.keys()).map(
+      (sessionId) => this.closeSession(sessionId)
+    );
     await Promise.allSettled(closePromises);
   }
 }
@@ -169,7 +172,9 @@ class TikTokScraper {
     let sessionId = null;
 
     try {
-      console.log(`[${++this.requestCount}] Searching: "${keyword}" (limit: ${limit})`);
+      console.log(
+        `[${++this.requestCount}] Searching: "${keyword}" (limit: ${limit})`
+      );
 
       const session = await sessionManager.createSession();
       sessionId = session.sessionId;
@@ -198,21 +203,32 @@ class TikTokScraper {
 
   async performSearch(page, keyword, limit) {
     try {
-      await page.waitForSelector('[data-testid="search-icon"], [aria-label*="Search"]', {
-        timeout: 10000,
-      });
+      await page.waitForSelector(
+        '[data-testid="search-icon"], [aria-label*="Search"]',
+        {
+          timeout: 10000,
+        }
+      );
 
       await page.click('[data-testid="search-icon"], [aria-label*="Search"]');
 
-      await page.waitForSelector('input[placeholder*="Search"], [data-testid="search-input"]', {
-        timeout: 5000,
-      });
+      await page.waitForSelector(
+        'input[placeholder*="Search"], [data-testid="search-input"]',
+        {
+          timeout: 5000,
+        }
+      );
 
-      await page.fill('input[placeholder*="Search"], [data-testid="search-input"]', keyword);
+      await page.fill(
+        'input[placeholder*="Search"], [data-testid="search-input"]',
+        keyword
+      );
       await page.keyboard.press("Enter");
     } catch (error) {
       console.log("Using direct URL navigation");
-      const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(keyword)}`;
+      const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(
+        keyword
+      )}`;
       await page.goto(searchUrl, {
         waitUntil: "domcontentloaded",
         timeout: CONFIG.TIMEOUT,
@@ -259,27 +275,7 @@ class TikTokScraper {
       try {
         const results = await strategy(page, limit);
         if (results && results.length > 0) {
-          // วิเคราะห์ sentiment หลังจาก extract ข้อมูลแล้ว
-          const resultsWithSentiment = await Promise.all(
-            results.slice(0, limit).map(async (item) => {
-              try {
-                const sentimentResult = await analyzeSentiment(item.caption);
-                if (sentimentResult === "ความคิดเห็นเชิงลบ") {
-                  return {
-                    ...item,
-                    sentiment: sentimentResult,
-                  };
-                }
-              } catch (error) {
-                console.warn("Sentiment analysis failed for:", item.caption, error.message);
-                // return {
-                //   ...item,
-                //   sentiment: { score: 0, label: "neutral", error: "Analysis failed" },
-                // };
-              }
-            })
-          );
-          return resultsWithSentiment;
+          return results.slice(0, limit);
         }
       } catch (error) {
         console.warn("Extraction strategy failed:", error.message);
@@ -327,7 +323,9 @@ class TikTokScraper {
 
             const username = extractUsernameFromUrl(videoUrl);
 
-            const captionElement = element.querySelector('[data-testid="caption"], [class*="caption"]');
+            const captionElement = element.querySelector(
+              '[data-testid="caption"], [class*="caption"]'
+            );
             let caption = "";
             if (captionElement) {
               caption = captionElement.textContent?.trim() || "";
@@ -335,7 +333,11 @@ class TikTokScraper {
               const textElements = element.querySelectorAll("*");
               for (const textEl of textElements) {
                 const text = textEl.textContent?.trim() || "";
-                if (text.length > 10 && text.length < 300 && !text.startsWith("@")) {
+                if (
+                  text.length > 10 &&
+                  text.length < 300 &&
+                  !text.startsWith("@")
+                ) {
                   caption = text;
                   break;
                 }
@@ -374,13 +376,15 @@ class TikTokScraper {
       const links = Array.from(document.querySelectorAll('a[href*="/video/"]'));
 
       return links.slice(0, maxResults).map((link, index) => {
-        const container = link.closest("div, article, section") || link.parentElement;
+        const container =
+          link.closest("div, article, section") || link.parentElement;
         const text = container ? container.textContent?.trim() || "" : "";
         const username = extractUsernameFromUrl(link.href);
 
         return {
           username: username,
-          caption: text.length > 10 ? text.substring(0, 200) : "No caption available",
+          caption:
+            text.length > 10 ? text.substring(0, 200) : "No caption available",
           postUrl: link.href,
         };
       });
@@ -418,6 +422,13 @@ async function handleSearch(req, res) {
         return res.json(response);
       } catch (error) {
         lastError = error;
+<<<<<<< HEAD
+=======
+        console.log(
+          `Attempt ${attempt}/${CONFIG.MAX_RETRIES} failed: ${error.message}`
+        );
+
+>>>>>>> 109133f4b340b67879d151ea98f520ade7b710a3
         if (attempt < CONFIG.MAX_RETRIES) {
           const backoffTime = Math.min(1000 * Math.pow(2, attempt), 10000);
           await sleep(backoffTime);

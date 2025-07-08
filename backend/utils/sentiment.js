@@ -16,7 +16,7 @@ async function analyzeSentiment(message) {
     if (!response.ok) throw new Error(`API error: ${response.status}`);
 
     const data = await response.json();
-    const sentiment = data?.sentiment;
+    const result = data.choices?.[0]?.message?.content?.trim();
 
     // Log all available sentiment data
     // console.log("TextBlob Polarity:", sentiment.textblob?.polarity);
