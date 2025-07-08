@@ -350,33 +350,42 @@ class TikTokScraper {
               postUrl: videoUrl,
             };
           } catch (error) {
-            return console.log("Errror: ", error);
+            console.warn("Error extracting video data:", error);
+            return null; // Return null for failed extractions
           }
         })
-        .filter((item) => item !== null);
+        .filter((item) => item !== null && item.postUrl); // Filter out null and invalid items
     }, limit);
 
-    // เพิ่ม sentiment analysis สำหรับผลลัพธ์
+    // เพิ่ม sentiment analysis สำหรับผลลัพธ์และกรองเฉพาะ negative sentiment
     const resultsWithSentiment = await Promise.all(
       rawResults.map(async (result) => {
         try {
           const sentiment = await analyzeSentiment(result.caption);
-          if (sentiment === "ความคิดเห็นเชิงลบ") {
-            return {
-              ...result,
-              analyzeSentiment: sentiment,
-            };
-          }
+          return {
+            ...result,
+            analyzeSentiment: sentiment,
+          };
         } catch (error) {
           console.warn(
             `Failed to analyze sentiment for caption: ${result.caption}`,
             error
           );
+          // Return null if sentiment analysis fails
+          return null;
         }
       })
     );
 
-    return resultsWithSentiment;
+    // กรองเฉพาะผลลัพธ์ที่มี sentiment เป็น "ความคิดเห็นเชิงลบ"
+    return resultsWithSentiment.filter(
+      (result) =>
+        result !== null &&
+        result !== undefined &&
+        result.postUrl &&
+        result.username &&
+        result.analyzeSentiment === "ความคิดเห็นเชิงลบ"
+    );
   }
 
   async extractWithFallbackSelectors(page, limit) {
@@ -396,41 +405,59 @@ class TikTokScraper {
 
       const links = Array.from(document.querySelectorAll('a[href*="/video/"]'));
 
-      return links.slice(0, maxResults).map((link, index) => {
-        const container =
-          link.closest("div, article, section") || link.parentElement;
-        const text = container ? container.textContent?.trim() || "" : "";
-        const username = extractUsernameFromUrl(link.href);
-        return {
-          username: username,
-          caption:
-            text.length > 10 ? text.substring(0, 200) : "No caption available",
-          postUrl: link.href,
-        };
-      });
+      return links
+        .slice(0, maxResults)
+        .map((link, index) => {
+          try {
+            const container =
+              link.closest("div, article, section") || link.parentElement;
+            const text = container ? container.textContent?.trim() || "" : "";
+            const username = extractUsernameFromUrl(link.href);
+            return {
+              username: username,
+              caption:
+                text.length > 10
+                  ? text.substring(0, 200)
+                  : "No caption available",
+              postUrl: link.href,
+            };
+          } catch (error) {
+            console.warn("Error in fallback extraction:", error);
+            return null;
+          }
+        })
+        .filter((item) => item !== null && item.postUrl); // Filter out null and invalid items
     }, limit);
 
-    // เพิ่ม sentiment analysis สำหรับผลลัพธ์
+    // เพิ่ม sentiment analysis สำหรับผลลัพธ์และกรองเฉพาะ negative sentiment
     const resultsWithSentiment = await Promise.all(
       rawResults.map(async (result) => {
         try {
           const sentiment = await analyzeSentiment(result.caption);
-          if (sentiment === "ความคิดเห็นเชิงลบ") {
-            return {
-              ...result,
-              analyzeSentiment: sentiment,
-            };
-          }
+          return {
+            ...result,
+            analyzeSentiment: sentiment,
+          };
         } catch (error) {
           console.warn(
             `Failed to analyze sentiment for caption: ${result.caption}`,
             error
           );
+          // Return null if sentiment analysis fails
+          return null;
         }
       })
     );
 
-    return resultsWithSentiment;
+    // กรองเฉพาะผลลัพธ์ที่มี sentiment เป็น "ความคิดเห็นเชิงลบ"
+    return resultsWithSentiment.filter(
+      (result) =>
+        result !== null &&
+        result !== undefined &&
+        result.postUrl &&
+        result.username &&
+        result.analyzeSentiment === "ความคิดเห็นเชิงลบ"
+    );
   }
 }
 
@@ -455,10 +482,20 @@ async function handleSearch(req, res) {
       try {
         results = await scraper.scrapeKeyword(keyword, requestedLimit);
 
+        // Final filter to ensure only negative sentiment results
+        const negativeResults = results.filter(
+          (result) =>
+            result !== null &&
+            result !== undefined &&
+            result.postUrl &&
+            result.username &&
+            result.analyzeSentiment === "ความคิดเห็นเชิงลบ"
+        );
+
         const response = {
           keyword,
-          total: results.length,
-          results,
+          total: negativeResults.length,
+          results: negativeResults,
         };
 
         return res.json(response);

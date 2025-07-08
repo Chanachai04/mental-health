@@ -9,7 +9,7 @@ function HomePage() {
   const [isSearching, setIsSearching] = useState(false);
   const [allResults, setAllResults] = useState([]);
   const [message, setMessage] = useState({ text: "", type: "" }); // State for displaying messages
-  const baseSearchAmount = 20;
+  const baseSearchAmount = 10;
   const [searchLimit, setSearchLimit] = useState(baseSearchAmount); // New state for increasing search limit
 
   const allResultsRef = useRef([]); // Ref to hold all results for the current session
@@ -142,9 +142,9 @@ function HomePage() {
           )}&limit=${searchLimit}` // Use the increasing searchLimit
         );
         const data = await res.json();
-
+        console.log(data.results);
         // Map the received data to a consistent structure
-        const results = (data.results || []).map((r) => ({
+        const results = data.results.map((r) => ({
           username: r.username || "anonymous",
           caption: r.caption || "",
           platform,

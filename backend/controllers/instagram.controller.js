@@ -27,7 +27,7 @@ async function loginAndCacheSession() {
 
 async function searchInstagram(keyword, limit) {
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     slowMo: 100,
   });
 

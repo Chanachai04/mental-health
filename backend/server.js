@@ -27,16 +27,21 @@ app.use("/api/tiktok", tiktokRoutes);
 
 app.post("/api/save", async (req, res) => {
   const { username, caption, platform, baseurl } = req.body;
+
   try {
+    // ตรวจสอบว่า caption หรือ baseurl ซ้ำหรือไม่
     const [rows] = await pool.query(
-      `SELECT 1 FROM mental_health WHERE caption = ? LIMIT 1`,
-      [caption]
+      `SELECT 1 FROM mental_health WHERE caption = ? AND baseurl = ? LIMIT 1`,
+      [caption, baseurl]
     );
 
     if (rows.length > 0) {
-      return res.status(409).json({ error: "Duplicate caption entry" });
+      return res
+        .status(409)
+        .json({ error: "Duplicate caption and baseurl entry" });
     }
 
+    // ถ้าไม่ซ้ำ → insert ได้เลย
     await pool.query(
       `INSERT INTO mental_health (username, caption, platform, baseurl) VALUES (?, ?, ?, ?)`,
       [username, caption, platform, baseurl]
@@ -49,15 +54,15 @@ app.post("/api/save", async (req, res) => {
   }
 });
 
-app.get("/api/info", async (req, res) => {
-  try {
-    const [rows] = await pool.query(`SELECT * FROM mental_health`);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch data" });
-  }
-});
+// app.get("/api/info", async (req, res) => {
+//   try {
+//     const [rows] = await pool.query(`SELECT * FROM mental_health`);
+//     res.json(rows);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Failed to fetch data" });
+//   }
+// });
 
 app.listen(PORT, () => {
   console.log(`Server running on http://119.59.118.120:${PORT}`);
