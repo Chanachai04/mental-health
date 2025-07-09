@@ -14,7 +14,10 @@ async function searchTikTok(keyword, limitRaw) {
   const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(
     keyword
   )}`;
-  await page.goto(searchUrl, { waitUntil: "networkidle" });
+  await page.goto(searchUrl, {
+    waitUntil: "networkidle",
+    timeout: 50000,
+  });
 
   try {
     await page.waitForSelector('div[data-e2e="search-card-video-caption"]', {

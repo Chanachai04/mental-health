@@ -3,16 +3,20 @@ import { Search, Hash, Loader2, ChartLine } from "lucide-react";
 
 function HomePage() {
   const [keyword, setKeyword] = useState("");
-  const [intervalMin, setIntervalMin] = useState(5);
+  const [intervalMin, setIntervalMin] = useState(2);
   const [loading, setLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [allResults, setAllResults] = useState([]);
   const [message, setMessage] = useState({ text: "", type: "" });
-  const baseSearchAmount = 45;
+
+  const baseSearchAmount = 25;
+  const maxLimit = 40;
   const [searchLimit, setSearchLimit] = useState(baseSearchAmount);
+  const searchLimitRef = useRef(baseSearchAmount); // track current limit
+  const isSearchingRef = useRef(false); // track if doSearch is running
+  const intervalIdRef = useRef(null);
 
   const allResultsRef = useRef([]);
-  const intervalIdRef = useRef(null);
   const messageTimeoutRef = useRef(null);
 
   const platforms = ["twitter", "tiktok"];
@@ -32,8 +36,22 @@ function HomePage() {
       if (messageTimeoutRef.current) {
         clearTimeout(messageTimeoutRef.current);
       }
+      if (intervalIdRef.current) {
+        clearTimeout(intervalIdRef.current);
+      }
     };
   }, []);
+
+  // Recursive timeout to wait for doSearch to finish before next call
+  const doSearchWithTimeout = async () => {
+    await doSearch();
+    if (isSearchingRef.current) {
+      intervalIdRef.current = setTimeout(
+        doSearchWithTimeout,
+        intervalMin * 60 * 60 * 1000
+      );
+    }
+  };
 
   const startSearch = () => {
     if (!keyword.trim()) {
@@ -43,20 +61,25 @@ function HomePage() {
 
     setAllResults([]);
     allResultsRef.current = [];
-    setSearchLimit(baseSearchAmount);
-    setIsSearching(true);
-    displayMessage("Starting search...", "info");
-    doSearch();
 
-    intervalIdRef.current = setInterval(doSearch, intervalMin * 60 * 1000);
+    // Reset limit and refs
+    setSearchLimit(baseSearchAmount);
+    searchLimitRef.current = baseSearchAmount;
+    setIsSearching(true);
+    isSearchingRef.current = true;
+
+    displayMessage("Starting search...", "info");
+
+    doSearchWithTimeout();
   };
 
   const stopSearch = async () => {
     setIsSearching(false);
+    isSearchingRef.current = false;
     displayMessage("Stopping search...", "info");
 
     if (intervalIdRef.current) {
-      clearInterval(intervalIdRef.current);
+      clearTimeout(intervalIdRef.current);
       intervalIdRef.current = null;
     }
 
@@ -73,6 +96,10 @@ function HomePage() {
 
     setAllResults([]);
     allResultsRef.current = [];
+
+    // Reset limit
+    setSearchLimit(baseSearchAmount);
+    searchLimitRef.current = baseSearchAmount;
   };
 
   const doSearch = async () => {
@@ -82,7 +109,18 @@ function HomePage() {
       return;
     }
 
+    if (isSearchingRef.current === false) {
+      // Prevent running if stopped
+      return;
+    }
+    if (loading) {
+      // Prevent overlapping calls
+      return;
+    }
+
+    isSearchingRef.current = true;
     setLoading(true);
+
     let newlyFoundResults = [];
 
     try {
@@ -91,13 +129,22 @@ function HomePage() {
           const res = await fetch(
             `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(
               keyword
-            )}&limit=${searchLimit}`
+            )}&limit=${searchLimitRef.current}`
           );
 
           if (!res.ok) return [];
 
           const data = await res.json();
-          console.log("Platform: ", platform, "Data: ", data.results);
+
+          console.log(
+            "Platform:",
+            platform,
+            "Limit:",
+            searchLimitRef.current,
+            "Data:",
+            data.results
+          );
+
           const results =
             data.results?.map((r) => ({
               username: r.username || "anonymous",
@@ -113,8 +160,7 @@ function HomePage() {
       });
 
       const allPlatformResults = await Promise.all(fetchPromises);
-      const mergedResults = allPlatformResults.flat();
-      newlyFoundResults = mergedResults;
+      newlyFoundResults = allPlatformResults.flat();
 
       if (newlyFoundResults.length > 0) {
         setAllResults((prev) => [...prev, ...newlyFoundResults]);
@@ -155,7 +201,14 @@ function HomePage() {
       displayMessage("Error during search: " + err.message, "error");
     } finally {
       setLoading(false);
-      setSearchLimit((prevLimit) => prevLimit + prevLimit);
+
+      // Increase limit by 10, reset to base if exceed maxLimit
+      setSearchLimit((prev) => {
+        const next = prev + 5;
+        const fixed = next > maxLimit ? baseSearchAmount : next;
+        searchLimitRef.current = fixed;
+        return fixed;
+      });
     }
   };
 
@@ -228,7 +281,7 @@ function HomePage() {
               htmlFor="interval-input"
               className="block mb-1 font-semibold text-gray-700"
             >
-              Search Frequency (minutes)
+              Search Frequency (hours)
             </label>
             <input
               id="interval-input"

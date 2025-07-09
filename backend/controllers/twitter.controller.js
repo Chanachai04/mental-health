@@ -57,10 +57,11 @@ async function searchTwitter(keyword, limitRaw) {
   });
   const page = await context.newPage();
 
-  const searchUrl = `https://x.com/search?q=${encodeURIComponent(
-    keyword
-  )}&src=typed_query&f=live`;
-  await page.goto(searchUrl, { waitUntil: "networkidle" });
+  const searchUrl = `https://x.com/search?q=${encodeURIComponent(keyword)}`;
+  await page.goto(searchUrl, {
+    waitUntil: "networkidle",
+    timeout: 50000,
+  });
 
   try {
     await page.waitForSelector('article div[data-testid="tweetText"]', {
@@ -81,13 +82,7 @@ async function searchTwitter(keyword, limitRaw) {
       if (results.length >= limit) break;
 
       const caption = await tweet
-        .$eval('div[data-testid="tweetText"]', (el) => {
-          try {
-            return (el.innerText || "").replace(/[\r\n]+/g, " ").trim();
-          } catch (e) {
-            return null;
-          }
-        })
+        .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
         .catch(() => null);
 
       const postUrl = await tweet
