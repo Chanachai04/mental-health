@@ -8,7 +8,7 @@ const instagramRoutes = require("./routers/instagram.route");
 const tiktokRoutes = require("./routers/tiktok.route");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -63,6 +63,49 @@ app.post("/api/save", async (req, res) => {
 //     res.status(500).json({ error: "Failed to fetch data" });
 //   }
 // });
+
+app.post("/api/save/bulk", async (req, res) => {
+  const { results } = req.body;
+
+  try {
+    let savedCount = 0;
+    let duplicateCount = 0;
+
+    // วนลูปผ่านแต่ละรายการ
+    for (const item of results) {
+      const { username, caption, platform, baseurl } = item;
+
+      // ตรวจสอบว่า baseurl ซ้ำหรือไม่
+      const [rows] = await pool.query(
+        `SELECT 1 FROM mental_health WHERE baseurl = ? LIMIT 1`,
+        [baseurl]
+      );
+
+      if (rows.length > 0) {
+        // ถ้าซ้ำ ข้ามไป
+        duplicateCount++;
+        continue;
+      }
+
+      // ถ้าไม่ซ้ำ → insert ได้เลย
+      await pool.query(
+        `INSERT INTO mental_health (username, caption, platform, baseurl) VALUES (?, ?, ?, ?)`,
+        [username, caption, platform, baseurl]
+      );
+
+      savedCount++;
+    }
+
+    res.json({
+      savedCount,
+      duplicateCount,
+      totalProcessed: results.length,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on http://119.59.118.120:${PORT}`);

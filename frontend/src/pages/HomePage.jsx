@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Hash, Loader2, ChartLine } from "lucide-react";
+import { Search, Hash, Loader2, BarChart3 } from "lucide-react";
 
 function HomePage() {
   const [keyword, setKeyword] = useState("");
@@ -9,8 +9,8 @@ function HomePage() {
   const [allResults, setAllResults] = useState([]);
   const [message, setMessage] = useState({ text: "", type: "" });
 
-  const baseSearchAmount = 25;
-  const maxLimit = 40;
+  const baseSearchAmount = 40;
+  const maxLimit = 60;
   const [searchLimit, setSearchLimit] = useState(baseSearchAmount);
   const searchLimitRef = useRef(baseSearchAmount); // track current limit
   const isSearchingRef = useRef(false); // track if doSearch is running
@@ -102,6 +102,51 @@ function HomePage() {
     searchLimitRef.current = baseSearchAmount;
   };
 
+  // ฟังก์ชั่นใหม่สำหรับบันทึกข้อมูลหลายรายการในครั้งเดียว
+  const saveMultipleResults = async (results) => {
+    try {
+      const response = await fetch("http://119.59.118.120:3000/api/save/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ results }),
+      });
+
+      if (response.ok) {
+        const savedData = await response.json();
+        return savedData.savedCount || results.length;
+      } else {
+        // ถ้า bulk save ไม่สำเร็จ ให้ลองบันทึกทีละรายการ
+        console.warn("Bulk save failed, trying individual saves...");
+        return await saveIndividualResults(results);
+      }
+    } catch (error) {
+      console.error("Bulk save error:", error);
+      // ถ้า bulk save error ให้ลองบันทึกทีละรายการ
+      return await saveIndividualResults(results);
+    }
+  };
+
+  // ฟังก์ชั่นสำรองสำหรับบันทึกทีละรายการ
+  const saveIndividualResults = async (results) => {
+    let savedCount = 0;
+    for (const result of results) {
+      try {
+        const response = await fetch("http://119.59.118.120:3000/api/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(result),
+        });
+
+        if (response.ok) {
+          savedCount++;
+        }
+      } catch (err) {
+        console.error("Error saving individual result:", err);
+      }
+    }
+    return savedCount;
+  };
+
   const doSearch = async () => {
     if (!keyword.trim()) {
       displayMessage("Search keyword is empty. Stopping search.", "error");
@@ -141,26 +186,33 @@ function HomePage() {
             platform,
             "Limit:",
             searchLimitRef.current,
-            "Data:",
-            data.results
+            "Data received:",
+            data
           );
 
+          // รองรับทั้ง single และ multiple keywords
           const results =
             data.results?.map((r) => ({
               username: r.username || "anonymous",
               caption: r.caption || "",
               platform,
               baseurl: r.postUrl || r.videoUrl || "",
+              searchKeyword: r.searchKeyword || keyword, // เพิ่มข้อมูล keyword ที่ใช้ค้นหา
+              sentiment: r.analyzeSentiment || null, // เพิ่มข้อมูล sentiment
             })) || [];
 
+          console.log(`${platform} processed results:`, results.length);
           return results;
-        } catch {
+        } catch (error) {
+          console.error(`Error fetching from ${platform}:`, error);
           return [];
         }
       });
 
       const allPlatformResults = await Promise.all(fetchPromises);
       newlyFoundResults = allPlatformResults.flat();
+
+      console.log("Total newly found results:", newlyFoundResults.length);
 
       if (newlyFoundResults.length > 0) {
         setAllResults((prev) => [...prev, ...newlyFoundResults]);
@@ -169,25 +221,8 @@ function HomePage() {
           ...newlyFoundResults,
         ];
 
-        let savedCount = 0;
-        for (const result of newlyFoundResults) {
-          try {
-            const response = await fetch(
-              "http://119.59.118.120:3000/api/save",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(result),
-              }
-            );
-
-            if (response.ok) {
-              savedCount++;
-            }
-          } catch (err) {
-            console.error("Error saving:", err);
-          }
-        }
+        // ใช้ฟังก์ชั่นใหม่สำหรับบันทึกหลายรายการในครั้งเดียว
+        const savedCount = await saveMultipleResults(newlyFoundResults);
 
         displayMessage(
           `Found ${newlyFoundResults.length} posts and saved ${savedCount}. Total this session: ${allResultsRef.current.length}`,
@@ -204,7 +239,7 @@ function HomePage() {
 
       // Increase limit by 10, reset to base if exceed maxLimit
       setSearchLimit((prev) => {
-        const next = prev + 5;
+        const next = prev + 10;
         const fixed = next > maxLimit ? baseSearchAmount : next;
         searchLimitRef.current = fixed;
         return fixed;
@@ -271,9 +306,12 @@ function HomePage() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               className="w-full border px-4 py-3 rounded-xl border-gray-200 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="e.g., #AI, new product launch"
+              placeholder="e.g., #AI, bitcoin,ethereum,dogecoin"
               disabled={isSearching}
             />
+            <p className="text-sm text-gray-500 mt-1">
+              Tip: Use comma (,) to search multiple keywords.
+            </p>
           </div>
 
           <div>
@@ -327,7 +365,7 @@ function HomePage() {
             rel="noopener noreferrer"
             className="w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
           >
-            <ChartLine /> Dashboard
+            <BarChart3 /> Dashboard
           </a>
         </div>
       </div>
