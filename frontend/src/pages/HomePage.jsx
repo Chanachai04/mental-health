@@ -105,7 +105,7 @@ function HomePage() {
   // ฟังก์ชั่นใหม่สำหรับบันทึกข้อมูลหลายรายการในครั้งเดียว
   const saveMultipleResults = async (results) => {
     try {
-      const response = await fetch("http://119.59.118.120:3000/api/save/bulk", {
+      const response = await fetch("http://119.59.118.120:3001/api/save/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ results }),
@@ -131,7 +131,7 @@ function HomePage() {
     let savedCount = 0;
     for (const result of results) {
       try {
-        const response = await fetch("http://119.59.118.120:3000/api/save", {
+        const response = await fetch("http://119.59.118.120:3001/api/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(result),
@@ -172,7 +172,7 @@ function HomePage() {
       const fetchPromises = platforms.map(async (platform) => {
         try {
           const res = await fetch(
-            `http://119.59.118.120:3000/api/${platform}/search?q=${encodeURIComponent(
+            `http://119.59.118.120:3001/api/${platform}/search?q=${encodeURIComponent(
               keyword
             )}&limit=${searchLimitRef.current}`
           );
