@@ -1,64 +1,85 @@
 const fs = require("fs");
-const { chromium } = require("playwright");
+const { chromium } = require("playwright-extra");
+const stealth = require("puppeteer-extra-plugin-stealth")();
 const { analyzeSentiment } = require("../utils/sentiment");
+
+// เพิ่ม stealth plugin เพื่อหลบการตรวจจับ bot
+chromium.use(stealth);
 
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
 let cachedStorageState = null;
 
 async function loginAndCacheSession() {
-  console.log("Launching browser for manual Twitter login...");
 
-  const browser = await chromium.launch({
-    headless: false, // ให้เห็น login page
-    slowMo: 100,
+  // ใช้ Chrome profile จาก Windows
+  const userDataDir = "./sessions/chrome-profile";
+  fs.mkdirSync(userDataDir, { recursive: true });
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    channel: "chrome", // ใช้ Chrome จริง
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-web-security",
-      "--disable-features=VizDisplayCompositor",
-      "--disable-background-timer-throttling",
-      "--disable-renderer-backgrounding",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-ipc-flooding-protection",
+      "--start-maximized",
+      "--disable-blink-features=AutomationControlled",
     ],
+    viewport: null,
+    locale: "en-US",
+    timezoneId: "America/New_York",
   });
 
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    viewport: { width: 1920, height: 1080 },
-    deviceScaleFactor: 1,
-    hasTouch: false,
-    isMobile: false,
-    javaScriptEnabled: true,
-    extraHTTPHeaders: {
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-      "Accept-Encoding": "gzip, deflate, br",
-      Connection: "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-    },
+  const page = context.pages()[0] || (await context.newPage());
+
+  await page.goto("https://x.com/i/flow/login", {
+    waitUntil: "domcontentloaded",
   });
-
-  const page = await context.newPage();
-
-  await page.goto("https://x.com/i/flow/login");
 
   try {
-    // รอจน login สำเร็จ (หน้า home) ภายใน 2 นาที
-    await page.waitForURL("https://x.com/home", { timeout: 120000 });
+    // รอให้ URL เปลี่ยนเป็น home หรือ URL ที่มี x.com โดยไม่มี /login
+    await page.waitForFunction(
+      () => {
+        const url = window.location.href;
+        return (
+          url.includes("x.com/home") ||
+          (url.includes("x.com") && !url.includes("/login"))
+        );
+      },
+      { timeout: 300000 } // 5 นาที
+    );
+
+    // รอเพิ่มอีกนิดให้แน่ใจว่า login สำเร็จ
+    await page.waitForTimeout(3000);
+
+    // ตรวจสอบว่า login สำเร็จจริงๆ โดยดูว่ามี element ของ home page หรือไม่
+    const isLoggedIn = await page
+      .waitForSelector('[data-testid="SideNav_AccountSwitcher_Button"]', {
+        timeout: 10000,
+      })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!isLoggedIn) {
+      throw new Error("ไม่พบ element ที่แสดงว่า login สำเร็จ");
+    }
+
+    // บันทึก session
     const storage = await context.storageState();
     fs.mkdirSync("./sessions", { recursive: true });
     fs.writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storage, null, 2));
-    console.log("Session saved successfully.");
+
+    console.log("\nLogin สำเร็จ! Session ถูกบันทึกแล้ว");
+    console.log(`ฟล์: ${STORAGE_STATE_PATH}\n`);
+    console.log(
+      "Browser profile ถูกบันทึกไว้ที่: ./sessions/chrome-profile\n"
+    );
   } catch (err) {
-    console.error("Login timeout or failed. Please try again.");
+    console.error("\n Login ล้มเหลว:", err.message);
+    console.error("กรุณาลองใหม่อีกครั้ง\n");
   }
 
   await context.close();
-  await browser.close();
 }
 
 async function simulateHumanBehavior(page) {
@@ -90,48 +111,26 @@ async function searchTwitter(keyword, limitRaw) {
 
   const browser = await chromium.launch({
     headless: true,
-    slowMo: 100,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-web-security",
-      "--disable-features=VizDisplayCompositor",
-      "--disable-background-timer-throttling",
-      "--disable-renderer-backgrounding",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-ipc-flooding-protection",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-features=IsolateOrigins,site-per-process",
     ],
   });
 
   const context = await browser.newContext({
     storageState: cachedStorageState,
     userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     viewport: { width: 1920, height: 1080 },
-    deviceScaleFactor: 1,
-    hasTouch: false,
-    isMobile: false,
-    javaScriptEnabled: true,
-    extraHTTPHeaders: {
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-      "Accept-Encoding": "gzip, deflate, br",
-      Connection: "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-    },
+    locale: "en-US",
+    timezoneId: "America/New_York",
+    colorScheme: "light",
   });
 
   const page = await context.newPage();
-
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => false });
-    Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
-    Object.defineProperty(navigator, "languages", {
-      get: () => ["en-US", "en"],
-    });
-  });
 
   const searchUrl = `https://x.com/search?q=${encodeURIComponent(
     keyword
@@ -252,7 +251,7 @@ async function searchMultipleKeywords(keywords, limit) {
 
       totalProcessed++;
       console.log(
-        `✅ เสร็จสิ้น keyword: "${keyword}" (${results.length} รายการ)`
+        `เสร็จสิ้น keyword: "${keyword}" (${results.length} รายการ)`
       );
 
       // หน่วงเวลาระหว่างการค้นหา keyword เพื่อหลีกเลี่ยงการถูกบล็อค
@@ -261,7 +260,7 @@ async function searchMultipleKeywords(keywords, limit) {
         await new Promise((resolve) => setTimeout(resolve, 10000));
       }
     } catch (error) {
-      console.error(`❌ เกิดข้อผิดพลาดกับ keyword: "${keyword}"`, error);
+      console.error(`เกิดข้อผิดพลาดกับ keyword: "${keyword}"`, error);
 
       // เพิ่มข้อมูลว่าเกิดข้อผิดพลาด
       allResults.push({

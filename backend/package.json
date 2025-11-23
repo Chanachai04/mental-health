@@ -18,6 +18,8 @@
     "mysql2": "^3.14.1",
     "node-fetch": "^2.7.0",
     "nodemon": "^3.1.10",
-    "playwright": "^1.53.1"
+    "playwright": "^1.53.1",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }
