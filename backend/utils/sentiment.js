@@ -2,7 +2,7 @@ require("dotenv").config();
 const axios = require("axios");
 
 const API_URL =
-  process.env.SENTIMENT_API_URL || "http://119.59.118.120:5000/sentiment";
+  process.env.SENTIMENT_API_URL ;
 
 async function analyzeSentiment(message) {
   if (!message || message.trim() === "") return "ไม่สามารถระบุได้";
