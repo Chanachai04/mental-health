@@ -7,6 +7,7 @@ const facebookRoutes = require("./routers/facebook.route");
 const twitterRoutes = require("./routers/twitter.route");
 const instagramRoutes = require("./routers/instagram.route");
 const tiktokRoutes = require("./routers/tiktok.route");
+const scheduler = require("./scheduler");
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -104,6 +105,40 @@ app.post("/api/save/bulk", async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Scheduler API endpoints
+app.post("/api/scheduler/start", (req, res) => {
+  const { keyword, intervalHours } = req.body;
+
+  if (!keyword || !intervalHours) {
+    return res.status(400).json({ error: "Missing keyword or intervalHours" });
+  }
+
+  try {
+    scheduler.startScheduler(keyword, intervalHours);
+    res.json({ success: true, message: "Scheduler started" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/scheduler/stop", (req, res) => {
+  try {
+    scheduler.stopScheduler();
+    res.json({ success: true, message: "Scheduler stopped" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/scheduler/status", (req, res) => {
+  try {
+    const status = scheduler.getSchedulerStatus();
+    res.json(status);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

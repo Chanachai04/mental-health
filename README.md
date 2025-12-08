@@ -101,6 +101,11 @@ pm2 save
 pm2 flush
 ```
 
+**restart backend**
+```bash
+pm2 restart my-backend 
+```
+
 **Build และ Deploy Frontend:**
 ```bash
 cd frontend

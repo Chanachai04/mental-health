@@ -1,266 +1,112 @@
-import { useState, useRef, useEffect } from "react";
-import { Search, Hash, Loader2, BarChart3 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Hash, Loader2, BarChart3, Clock } from "lucide-react";
 
 function HomePage() {
   const [keyword, setKeyword] = useState("");
-  const [intervalMin, setIntervalMin] = useState(2);
+  const [intervalHours, setIntervalHours] = useState(2);
   const [loading, setLoading] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [allResults, setAllResults] = useState([]);
+  const [schedulerStatus, setSchedulerStatus] = useState({
+    isRunning: false,
+    totalCollected: 0,
+    lastSearchTime: null,
+    nextSearchTime: null,
+  });
   const [message, setMessage] = useState({ text: "", type: "" });
-
-  const baseSearchAmount = 40;
-  const maxLimit = 60;
-  const [searchLimit, setSearchLimit] = useState(baseSearchAmount);
-  const searchLimitRef = useRef(baseSearchAmount); // track current limit
-  const isSearchingRef = useRef(false); // track if doSearch is running
-  const intervalIdRef = useRef(null);
-
-  const allResultsRef = useRef([]);
-  const messageTimeoutRef = useRef(null);
-  const intervalMinRef = useRef(intervalMin); // เก็บค่า interval ล่าสุด
-
-  const platforms = ["twitter", "tiktok"];
-
-  // อัพเดท ref ทุกครั้งที่ intervalMin เปลี่ยน
-  useEffect(() => {
-    intervalMinRef.current = intervalMin;
-  }, [intervalMin]);
 
   const displayMessage = (text, type = "info") => {
     setMessage({ text, type });
-    if (messageTimeoutRef.current) {
-      clearTimeout(messageTimeoutRef.current);
-    }
-    messageTimeoutRef.current = setTimeout(() => {
+    setTimeout(() => {
       setMessage({ text: "", type: "" });
     }, 5000);
   };
 
+  // ดึงสถานะ scheduler ทุก 10 วินาที
   useEffect(() => {
-    return () => {
-      if (messageTimeoutRef.current) {
-        clearTimeout(messageTimeoutRef.current);
-      }
-      if (intervalIdRef.current) {
-        clearTimeout(intervalIdRef.current);
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(
+          "http://119.59.118.120:3001/api/scheduler/status"
+        );
+        if (res.ok) {
+          const status = await res.json();
+          setSchedulerStatus(status);
+        }
+      } catch (error) {
+        console.error("Error fetching scheduler status:", error);
       }
     };
+
+    fetchStatus(); // เรียกทันทีตอนเริ่ม
+    const interval = setInterval(fetchStatus, 10000); // เรียกทุก 10 วินาที
+
+    return () => clearInterval(interval);
   }, []);
 
-  // Recursive timeout to wait for doSearch to finish before next call
-  const doSearchWithTimeout = async () => {
-    await doSearch();
-    if (isSearchingRef.current) {
-      const intervalMs = intervalMinRef.current * 60 * 60 * 1000; // ใช้ค่าจาก ref
-      console.log(`Next search scheduled in ${intervalMinRef.current} hours (${intervalMs}ms)`);
-      intervalIdRef.current = setTimeout(
-        doSearchWithTimeout,
-        intervalMs
-      );
-    }
-  };
-
-  const startSearch = () => {
+  const startSearch = async () => {
     if (!keyword.trim()) {
       displayMessage("Please enter a search keyword.", "error");
       return;
     }
 
-    setAllResults([]);
-    allResultsRef.current = [];
+    setLoading(true);
+    try {
+      const res = await fetch(
+        "http://119.59.118.120:3001/api/scheduler/start",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            keyword: keyword,
+            intervalHours: intervalHours,
+          }),
+        }
+      );
 
-    // Reset limit and refs
-    setSearchLimit(baseSearchAmount);
-    searchLimitRef.current = baseSearchAmount;
-    setIsSearching(true);
-    isSearchingRef.current = true;
-
-    displayMessage("Starting search...", "info");
-
-    doSearchWithTimeout();
+      if (res.ok) {
+        displayMessage("Scheduler started successfully!", "success");
+      } else {
+        displayMessage("Failed to start scheduler", "error");
+      }
+    } catch (error) {
+      displayMessage("Error: " + error.message, "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const stopSearch = async () => {
-    setIsSearching(false);
-    isSearchingRef.current = false;
-    displayMessage("Stopping search...", "info");
-
-    if (intervalIdRef.current) {
-      clearTimeout(intervalIdRef.current);
-      intervalIdRef.current = null;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    if (allResultsRef.current.length > 0) {
-      displayMessage(
-        `Search stopped. ${allResultsRef.current.length} items were collected and saved.`,
-        "success"
-      );
-    } else {
-      displayMessage("Search stopped. No data was collected.", "info");
-    }
-
-    setAllResults([]);
-    allResultsRef.current = [];
-
-    // Reset limit
-    setSearchLimit(baseSearchAmount);
-    searchLimitRef.current = baseSearchAmount;
-  };
-
-  // ฟังก์ชั่นใหม่สำหรับบันทึกข้อมูลหลายรายการในครั้งเดียว
-  const saveMultipleResults = async (results) => {
+    setLoading(true);
     try {
-      const response = await fetch("http://119.59.118.120:3001/api/save/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ results }),
-      });
+      const res = await fetch(
+        "http://119.59.118.120:3001/api/scheduler/stop",
+        {
+          method: "POST",
+        }
+      );
 
-      if (response.ok) {
-        const savedData = await response.json();
-        return savedData.savedCount || results.length;
+      if (res.ok) {
+        displayMessage("Scheduler stopped successfully!", "success");
       } else {
-        // ถ้า bulk save ไม่สำเร็จ ให้ลองบันทึกทีละรายการ
-        console.warn("Bulk save failed, trying individual saves...");
-        return await saveIndividualResults(results);
+        displayMessage("Failed to stop scheduler", "error");
       }
     } catch (error) {
-      console.error("Bulk save error:", error);
-      // ถ้า bulk save error ให้ลองบันทึกทีละรายการ
-      return await saveIndividualResults(results);
-    }
-  };
-
-  // ฟังก์ชั่นสำรองสำหรับบันทึกทีละรายการ
-  const saveIndividualResults = async (results) => {
-    let savedCount = 0;
-    for (const result of results) {
-      try {
-        const response = await fetch("http://119.59.118.120:3001/api/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(result),
-        });
-
-        if (response.ok) {
-          savedCount++;
-        }
-      } catch (err) {
-        console.error("Error saving individual result:", err);
-      }
-    }
-    return savedCount;
-  };
-
-  const doSearch = async () => {
-    if (!keyword.trim()) {
-      displayMessage("Search keyword is empty. Stopping search.", "error");
-      stopSearch();
-      return;
-    }
-
-    if (isSearchingRef.current === false) {
-      // Prevent running if stopped
-      return;
-    }
-    if (loading) {
-      // Prevent overlapping calls
-      return;
-    }
-
-    isSearchingRef.current = true;
-    setLoading(true);
-
-    let newlyFoundResults = [];
-
-    try {
-      const fetchPromises = platforms.map(async (platform) => {
-        try {
-          const res = await fetch(
-            `http://119.59.118.120:3001/api/${platform}/search?q=${encodeURIComponent(
-              keyword
-            )}&limit=${searchLimitRef.current}`
-          );
-
-          if (!res.ok) return [];
-
-          const data = await res.json();
-
-          console.log(
-            "Platform:",
-            platform,
-            "Limit:",
-            searchLimitRef.current,
-            "Data received:",
-            data
-          );
-
-          // รองรับทั้ง single และ multiple keywords
-          const results =
-            data.results?.map((r) => ({
-              username: r.username || "anonymous",
-              caption: r.caption || "",
-              platform,
-              baseurl: r.postUrl || r.videoUrl || "",
-              searchKeyword: r.searchKeyword || keyword, // เพิ่มข้อมูล keyword ที่ใช้ค้นหา
-              sentiment: r.analyzeSentiment || null, // เพิ่มข้อมูล sentiment
-            })) || [];
-
-          console.log(`${platform} processed results:`, results.length);
-          return results;
-        } catch (error) {
-          console.error(`Error fetching from ${platform}:`, error);
-          return [];
-        }
-      });
-
-      const allPlatformResults = await Promise.all(fetchPromises);
-      newlyFoundResults = allPlatformResults.flat();
-
-      console.log("Total newly found results:", newlyFoundResults.length);
-
-      if (newlyFoundResults.length > 0) {
-        setAllResults((prev) => [...prev, ...newlyFoundResults]);
-        allResultsRef.current = [
-          ...allResultsRef.current,
-          ...newlyFoundResults,
-        ];
-
-        // ใช้ฟังก์ชั่นใหม่สำหรับบันทึกหลายรายการในครั้งเดียว
-        const savedCount = await saveMultipleResults(newlyFoundResults);
-
-        displayMessage(
-          `Found ${newlyFoundResults.length} posts and saved ${savedCount}. Total this session: ${allResultsRef.current.length}`,
-          "success"
-        );
-      } else {
-        displayMessage("No posts found in this interval.", "info");
-      }
-    } catch (err) {
-      console.error("Search error:", err);
-      displayMessage("Error during search: " + err.message, "error");
+      displayMessage("Error: " + error.message, "error");
     } finally {
       setLoading(false);
-
-      // Increase limit by 10, reset to base if exceed maxLimit
-      setSearchLimit((prev) => {
-        const next = prev + 10;
-        const fixed = next > maxLimit ? baseSearchAmount : next;
-        searchLimitRef.current = fixed;
-        return fixed;
-      });
     }
   };
 
   const handleSearchClick = () => {
-    if (isSearching) {
+    if (schedulerStatus.isRunning) {
       stopSearch();
     } else {
       startSearch();
     }
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleString("th-TH");
   };
 
   return (
@@ -300,6 +146,40 @@ function HomePage() {
             </div>
           )}
 
+          {/* แสดงสถานะ Scheduler */}
+          {schedulerStatus.isRunning && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="w-5 h-5 text-blue-600" />
+                <span className="font-semibold text-blue-800">
+                  Scheduler Running
+                </span>
+              </div>
+              <div className="text-sm text-gray-700 space-y-1">
+                <p>
+                  <span className="font-medium">Keyword:</span>{" "}
+                  {schedulerStatus.keyword}
+                </p>
+                <p>
+                  <span className="font-medium">Interval:</span>{" "}
+                  {schedulerStatus.intervalHours} hours
+                </p>
+                <p>
+                  <span className="font-medium">Total Collected:</span>{" "}
+                  {schedulerStatus.totalCollected} posts
+                </p>
+                <p>
+                  <span className="font-medium">Last Search:</span>{" "}
+                  {formatDateTime(schedulerStatus.lastSearchTime)}
+                </p>
+                <p>
+                  <span className="font-medium">Next Search:</span>{" "}
+                  {formatDateTime(schedulerStatus.nextSearchTime)}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div>
             <label
               htmlFor="keyword-input"
@@ -315,7 +195,7 @@ function HomePage() {
               onChange={(e) => setKeyword(e.target.value)}
               className="w-full border px-4 py-3 rounded-xl border-gray-200 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               placeholder="e.g., #AI, bitcoin,ethereum,dogecoin"
-              disabled={isSearching}
+              disabled={schedulerStatus.isRunning}
             />
             <p className="text-sm text-gray-500 mt-1">
               Tip: Use comma (,) to search multiple keywords.
@@ -333,10 +213,10 @@ function HomePage() {
               id="interval-input"
               type="number"
               min={1}
-              value={intervalMin}
-              onChange={(e) => setIntervalMin(Number(e.target.value))}
+              value={intervalHours}
+              onChange={(e) => setIntervalHours(Number(e.target.value))}
               className="w-full border px-4 py-3 rounded-xl border-gray-200 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              disabled={isSearching}
+              disabled={schedulerStatus.isRunning}
             />
           </div>
 
@@ -344,7 +224,7 @@ function HomePage() {
             onClick={handleSearchClick}
             className={`w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 
             ${
-              isSearching
+              schedulerStatus.isRunning
                 ? "bg-red-500 hover:bg-red-600"
                 : "bg-green-500 hover:bg-green-600"
             }
@@ -355,9 +235,9 @@ function HomePage() {
             {loading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Searching...
+                {schedulerStatus.isRunning ? "Stopping..." : "Starting..."}
               </>
-            ) : isSearching ? (
+            ) : schedulerStatus.isRunning ? (
               "Stop Search"
             ) : (
               <>
