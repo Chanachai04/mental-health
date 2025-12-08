@@ -96,16 +96,16 @@ npm install -g pm2
 ```bash
 cd backend
 pm2 start server.js --name "my-backend"
-pm2 logs social-media-backend
+pm2 logs my-backend
 pm2 save
 ```
 
 **รัน Backend ด้วย PM2 ถ้า [PM2][ERROR] Script already launched, add -f option to force re-execution:**
 ```bash
 cd backend
-pm2 delete social-media-backend
+pm2 delete my-backend
 pm2 start server.js --name "my-backend"
-pm2 logs social-media-backend
+pm2 logs my-backend
 pm2 save
 ```
 
