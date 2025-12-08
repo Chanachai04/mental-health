@@ -1,36 +1,50 @@
 const fs = require("fs");
-const { chromium } = require("playwright-extra");
-const stealth = require("puppeteer-extra-plugin-stealth")();
+const { chromium } = require("playwright");
 const { analyzeSentiment } = require("../utils/sentiment");
 
-// เพิ่ม stealth plugin เพื่อหลบการตรวจจับ bot
-chromium.use(stealth);
+// ฟังก์ชันสำหรับหลบการตรวจจับ bot
+async function addStealthScripts(page) {
+  await page.addInitScript(() => {
+    // ซ่อน webdriver
+    Object.defineProperty(navigator, 'webdriver', {
+      get: () => false,
+    });
+    
+    // เพิ่ม plugins
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [1, 2, 3, 4, 5],
+    });
+    
+    // เพิ่ม languages
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['en-US', 'en'],
+    });
+    
+    // ซ่อน automation
+    delete navigator.__proto__.webdriver;
+  });
+}
 
 const STORAGE_STATE_PATH = "./sessions/storageStateTwitter.json";
 let cachedStorageState = null;
 
 async function loginAndCacheSession() {
 
-  // ใช้ Chrome profile จาก Windows
-  const userDataDir = "./sessions/chrome-profile";
-  fs.mkdirSync(userDataDir, { recursive: true });
-
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
-    channel: "chrome", // ใช้ Chrome จริง
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--start-maximized",
-      "--disable-blink-features=AutomationControlled",
-    ],
-    viewport: null,
-    locale: "en-US",
-    timezoneId: "America/New_York",
+  const browser = await chromium.launch({
+    headless: true,
   });
 
-  const page = context.pages()[0] || (await context.newPage());
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    locale: "en-US",
+    timezoneId: "America/New_York",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  });
+
+  const page = await context.newPage();
+  
+  // เพิ่ม stealth scripts
+  await addStealthScripts(page);
 
   await page.goto("https://x.com/i/flow/login", {
     waitUntil: "domcontentloaded",
@@ -71,15 +85,13 @@ async function loginAndCacheSession() {
 
     console.log("\nLogin สำเร็จ! Session ถูกบันทึกแล้ว");
     console.log(`ฟล์: ${STORAGE_STATE_PATH}\n`);
-    console.log(
-      "Browser profile ถูกบันทึกไว้ที่: ./sessions/chrome-profile\n"
-    );
   } catch (err) {
     console.error("\n Login ล้มเหลว:", err.message);
     console.error("กรุณาลองใหม่อีกครั้ง\n");
   }
 
   await context.close();
+  await browser.close();
 }
 
 async function simulateHumanBehavior(page) {
@@ -111,15 +123,6 @@ async function searchTwitter(keyword, limitRaw) {
 
   const browser = await chromium.launch({
     headless: true,
-    args: [
-      "--headless=new",
-      "--disable-gpu",
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-blink-features=AutomationControlled",
-      "--disable-features=IsolateOrigins,site-per-process",
-    ],
   });
 
   const context = await browser.newContext({
@@ -133,6 +136,9 @@ async function searchTwitter(keyword, limitRaw) {
   });
 
   const page = await context.newPage();
+  
+  // เพิ่ม stealth scripts
+  await addStealthScripts(page);
 
   const searchUrl = `https://x.com/search?q=${encodeURIComponent(
     keyword

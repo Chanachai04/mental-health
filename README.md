@@ -39,19 +39,6 @@ cd frontend
 npm install
 ```
 
-### 3. ตั้งค่า Environment Variables
-
-สร้างไฟล์ `backend/.env`:
-
-```env
-PORT=3001
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=mental_health_db
-SENTIMENT_API_URL=http://your-sentiment-api-url
-```
-
 ### 4. ตั้งค่า Database
 
 สร้างตาราง `mental_health` ใน MySQL:

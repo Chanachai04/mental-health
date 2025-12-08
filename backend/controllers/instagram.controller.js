@@ -7,7 +7,11 @@ let cachedStorageState = null;
 
 async function loginAndCacheSession() {
   console.log("เปิด browser เพื่อ login Instagram...");
-  const browser = await chromium.launch({ headless: false, slowMo: 100 });
+  const browser = await chromium.launch({ 
+    headless: true, 
+    slowMo: 100,
+    args: ['--headless=new']
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -24,9 +28,9 @@ async function loginAndCacheSession() {
 
 async function searchInstagram(keyword, limit) {
   const browser = await chromium.launch({ 
-    headless: true, 
+    headless: true,
     slowMo: 100,
-    args: ['--headless=new', '--disable-gpu', '--no-sandbox']
+    args: ['--headless=new', '--no-sandbox', '--disable-setuid-sandbox']
   });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
