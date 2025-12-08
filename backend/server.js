@@ -107,6 +107,6 @@ app.post("/api/save/bulk", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://119.59.118.120:${PORT}`);
 });

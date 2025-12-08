@@ -95,7 +95,7 @@ npm install -g pm2
 **รัน Backend ด้วย PM2:**
 ```bash
 cd backend
-pm2 start server.js --name social-media-backend
+pm2 start server.js --name "my-backend"
 pm2 logs social-media-backend
 pm2 save
 ```
@@ -104,9 +104,14 @@ pm2 save
 ```bash
 cd backend
 pm2 delete social-media-backend
-pm2 start npm --name "social-media-backend" -- start
+pm2 start server.js --name "my-backend"
 pm2 logs social-media-backend
 pm2 save
+```
+
+**เคลียร์ log เก่าทิ้ง**
+```bash
+pm2 flush
 ```
 
 **Build และ Deploy Frontend:**
