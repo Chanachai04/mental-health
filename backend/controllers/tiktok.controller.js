@@ -7,6 +7,8 @@ async function createOptimizedBrowser() {
     headless: true,
     slowMo: 200, // เพิ่มความช้าให้เหมือน human
     args: [
+      "--headless=new",
+      "--disable-gpu",
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",

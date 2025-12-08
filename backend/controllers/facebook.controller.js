@@ -27,7 +27,11 @@ async function loginAndCacheSession() {
 
 async function searchFacebook(keyword, limitRaw) {
   const limit = parseInt(limitRaw);
-  const browser = await chromium.launch({ headless: true, slowMo: 100 });
+  const browser = await chromium.launch({ 
+    headless: true, 
+    slowMo: 100,
+    args: ['--headless=new', '--disable-gpu', '--no-sandbox']
+  });
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
     cachedStorageState = JSON.parse(

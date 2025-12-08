@@ -112,6 +112,8 @@ async function searchTwitter(keyword, limitRaw) {
   const browser = await chromium.launch({
     headless: true,
     args: [
+      "--headless=new",
+      "--disable-gpu",
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
