@@ -99,6 +99,14 @@ pm2 start server.js --name social-media-backend
 pm2 save
 ```
 
+**รัน Backend ด้วย PM2 ถ้า [PM2][ERROR] Script already launched, add -f option to force re-execution:**
+```bash
+cd backend
+pm2 delete social-media-backend
+pm2 start npm --name "social-media-backend" -- start
+pm2 save
+```
+
 **Build และ Deploy Frontend:**
 ```bash
 cd frontend
