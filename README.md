@@ -96,6 +96,7 @@ npm install -g pm2
 ```bash
 cd backend
 pm2 start server.js --name social-media-backend
+pm2 logs social-media-backend
 pm2 save
 ```
 
@@ -104,6 +105,7 @@ pm2 save
 cd backend
 pm2 delete social-media-backend
 pm2 start npm --name "social-media-backend" -- start
+pm2 logs social-media-backend
 pm2 save
 ```
 
