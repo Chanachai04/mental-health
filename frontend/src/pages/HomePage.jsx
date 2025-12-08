@@ -18,8 +18,14 @@ function HomePage() {
 
   const allResultsRef = useRef([]);
   const messageTimeoutRef = useRef(null);
+  const intervalMinRef = useRef(intervalMin); // เก็บค่า interval ล่าสุด
 
   const platforms = ["twitter", "tiktok"];
+
+  // อัพเดท ref ทุกครั้งที่ intervalMin เปลี่ยน
+  useEffect(() => {
+    intervalMinRef.current = intervalMin;
+  }, [intervalMin]);
 
   const displayMessage = (text, type = "info") => {
     setMessage({ text, type });
@@ -46,9 +52,11 @@ function HomePage() {
   const doSearchWithTimeout = async () => {
     await doSearch();
     if (isSearchingRef.current) {
+      const intervalMs = intervalMinRef.current * 60 * 60 * 1000; // ใช้ค่าจาก ref
+      console.log(`Next search scheduled in ${intervalMinRef.current} hours (${intervalMs}ms)`);
       intervalIdRef.current = setTimeout(
         doSearchWithTimeout,
-        intervalMin * 60 * 60 * 1000
+        intervalMs
       );
     }
   };
