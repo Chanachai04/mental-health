@@ -4,7 +4,9 @@ const { analyzeSentiment } = require("../utils/sentiment");
 
 async function createOptimizedBrowser() {
   const browser = await chromium.launch({
-    headless: true,
+    headless: true,           // ซ่อนหน้าต่าง Browser
+    channel: "chrome",        // ซ่อน CMD ดำๆ (โดยใช้ Chrome ตัวเต็มแทน)
+    args: ["--disable-gpu"],   // ลดภาระและป้องกันหน้าต่าง GPU process เด้งแว้บๆ
     slowMo: 200, // เพิ่มความช้าให้เหมือน human
     args: [
       "--headless=new",

@@ -1,18 +1,26 @@
 const fs = require("fs");
 const path = require("path");
 
-// ลองหาไฟล์ใน 2 ที่
-let cookiesPath = "cookies.json";
+// ลองหาไฟล์ใน 3 ที่
+let cookiesPath = "twitter-cookies-raw.json";
+if (!fs.existsSync(cookiesPath)) {
+  cookiesPath = "./sessions/twitter-cookies-raw.json";
+}
+if (!fs.existsSync(cookiesPath)) {
+  cookiesPath = "cookies.json";
+}
 if (!fs.existsSync(cookiesPath)) {
   cookiesPath = "./sessions/cookies.json";
 }
 
 if (!fs.existsSync(cookiesPath)) {
-  console.error("❌ ไม่พบไฟล์ cookies.json");
-  console.error("กรุณาสร้างไฟล์ cookies.json และวาง cookies ที่ export จาก Chrome");
-  console.error("\nสามารถวางไฟล์ได้ 2 ที่:");
-  console.error("1. ./cookies.json");
-  console.error("2. ./sessions/cookies.json\n");
+  console.error("❌ ไม่พบไฟล์ cookies");
+  console.error("กรุณาสร้างไฟล์และวาง cookies ที่ export จาก Cookie-Editor");
+  console.error("\nสามารถวางไฟล์ได้ (ชื่อใดชื่อหนึ่ง):");
+  console.error("1. ./twitter-cookies-raw.json");
+  console.error("2. ./sessions/twitter-cookies-raw.json");
+  console.error("3. ./cookies.json");
+  console.error("4. ./sessions/cookies.json\n");
   process.exit(1);
 }
 
