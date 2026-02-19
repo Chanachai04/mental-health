@@ -9,17 +9,17 @@ async function addStealthScripts(page) {
     Object.defineProperty(navigator, 'webdriver', {
       get: () => false,
     });
-    
+
     // เพิ่ม plugins
     Object.defineProperty(navigator, 'plugins', {
       get: () => [1, 2, 3, 4, 5],
     });
-    
+
     // เพิ่ม languages
     Object.defineProperty(navigator, 'languages', {
       get: () => ['en-US', 'en'],
     });
-    
+
     // ซ่อน automation
     delete navigator.__proto__.webdriver;
   });
@@ -31,7 +31,7 @@ let cachedStorageState = null;
 async function loginAndCacheSession() {
 
   const browser = await chromium.launch({
-    headless: true,           // ซ่อนหน้าต่าง Browser
+    headless: false,           // ซ่อนหน้าต่าง Browser
     channel: "chrome",        // ซ่อน CMD ดำๆ (โดยใช้ Chrome ตัวเต็มแทน)
     args: ["--disable-gpu"],   // ลดภาระและป้องกันหน้าต่าง GPU process เด้งแว้บๆ
   });
@@ -44,7 +44,7 @@ async function loginAndCacheSession() {
   });
 
   const page = await context.newPage();
-  
+
   // เพิ่ม stealth scripts
   await addStealthScripts(page);
 
@@ -109,7 +109,7 @@ async function simulateHumanBehavior(page) {
 }
 
 async function searchTwitter(keyword, limitRaw) {
-  const limit = parseInt(limitRaw);
+  const limit = Math.max(1, Number.parseInt(limitRaw ?? "10", 10) || 10);
 
   if (!cachedStorageState && fs.existsSync(STORAGE_STATE_PATH)) {
     cachedStorageState = JSON.parse(
@@ -123,118 +123,141 @@ async function searchTwitter(keyword, limitRaw) {
     throw new Error("Login required. Please retry after login.");
   }
 
-  const browser = await chromium.launch({
-    headless: true,           // ซ่อนหน้าต่าง Browser
-    channel: "chrome",        // ซ่อน CMD ดำๆ (โดยใช้ Chrome ตัวเต็มแทน)
-    args: ["--disable-gpu"],   // ลดภาระและป้องกันหน้าต่าง GPU process เด้งแว้บๆ
-  });
-
-  const context = await browser.newContext({
-    storageState: cachedStorageState,
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    viewport: { width: 1920, height: 1080 },
-    locale: "en-US",
-    timezoneId: "America/New_York",
-    colorScheme: "light",
-  });
-
-  const page = await context.newPage();
-  
-  // เพิ่ม stealth scripts
-  await addStealthScripts(page);
-
-  const searchUrl = `https://x.com/search?q=${encodeURIComponent(
-    keyword
-  )}&src=typed_query&f=live`;
-  await page.goto(searchUrl, {
-    waitUntil: "networkidle",
-    timeout: 50000,
-  });
-
+  let browser;
+  let context;
   try {
-    await page.waitForSelector('article div[data-testid="tweetText"]', {
-      timeout: 10000,
+    browser = await chromium.launch({
+      headless: true,
+      channel: "chrome",
+      args: ["--disable-gpu"],
     });
-  } catch {
-    console.warn("No tweets found or failed to load.");
-  }
 
-  const results = [];
-  const seenUrls = new Set();
-  let scrollAttempts = 0;
-  const maxScrollAttempts = 20;
-  let noContentCount = 0;
+    context = await browser.newContext({
+      storageState: cachedStorageState,
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      viewport: { width: 1920, height: 1080 },
+      locale: "en-US",
+      timezoneId: "America/New_York",
+      colorScheme: "light",
+    });
 
-  while (results.length < limit && scrollAttempts < maxScrollAttempts) {
-    await simulateHumanBehavior(page);
+    context.setDefaultTimeout(30000);
+    context.setDefaultNavigationTimeout(90000);
 
-    const tweets = await page.$$("article");
-    console.log(`รอบที่ ${scrollAttempts + 1} X: พบ ${tweets.length} โพสต์`);
+    // ลด resource หนักๆ เพื่อให้โหลดไวและลดโอกาส timeout
+    await context.route("**/*", async (route) => {
+      const req = route.request();
+      const type = req.resourceType();
+      if (["image", "media", "font"].includes(type)) return route.abort();
+      return route.continue();
+    });
 
-    for (const tweet of tweets) {
-      if (results.length >= limit) break;
+    const page = await context.newPage();
 
-      const caption = await tweet
-        .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
-        .catch(() => null);
+    // เพิ่ม stealth scripts
+    await addStealthScripts(page);
 
-      const postUrl = await tweet
-        .$eval('a[role="link"][href*="/status/"]', (el) => el.href)
-        .catch(() => null);
+    const searchUrl = `https://x.com/search?q=${encodeURIComponent(
+      keyword
+    )}&src=typed_query&f=live`;
 
-      const username = await tweet
-        .$eval('div[dir="ltr"] > span', (el) => el.innerText)
-        .catch(() => "unknown");
+    // "networkidle" มักไม่เกิดบน x.com → ใช้ domcontentloaded แล้วรอ selector แทน
+    await page.goto(searchUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 90000,
+    });
 
-      if (!caption || !postUrl || seenUrls.has(postUrl)) continue;
-      seenUrls.add(postUrl);
+    // ถ้า session หมดอายุ มักถูกเด้งไปหน้า login
+    if (page.url().includes("/i/flow/login")) {
+      cachedStorageState = null;
+      throw new Error("Twitter session expired. Please login again.");
+    }
 
-      try {
-        const sentiment = await analyzeSentiment(caption);
-        if (sentiment === "ความคิดเห็นเชิงลบ") {
-          results.push({
-            username,
-            caption,
-            postUrl,
-            analyzeSentiment: sentiment,
-          });
-          console.log(`เก็บโพสต์ X เชิงลบได้ ${results.length}/${limit}`);
+    try {
+      await page.waitForSelector('article [data-testid="tweetText"]', {
+        timeout: 25000,
+      });
+    } catch {
+      console.warn("No tweets found or failed to load.");
+    }
+
+    const results = [];
+    const seenUrls = new Set();
+    let scrollAttempts = 0;
+    const maxScrollAttempts = 20;
+    let noContentCount = 0;
+
+    while (results.length < limit && scrollAttempts < maxScrollAttempts) {
+      await simulateHumanBehavior(page);
+
+      const tweets = await page.$$("article");
+      console.log(`รอบที่ ${scrollAttempts + 1} X: พบ ${tweets.length} โพสต์`);
+
+      for (const tweet of tweets) {
+        if (results.length >= limit) break;
+
+        const caption = await tweet
+          .$eval('div[data-testid="tweetText"]', (el) => el.innerText)
+          .catch(() => null);
+
+        const postUrl = await tweet
+          .$eval('a[role="link"][href*="/status/"]', (el) => el.href)
+          .catch(() => null);
+
+        const username = await tweet
+          .$eval('div[dir="ltr"] > span', (el) => el.innerText)
+          .catch(() => "unknown");
+
+        if (!caption || !postUrl || seenUrls.has(postUrl)) continue;
+        seenUrls.add(postUrl);
+
+        try {
+          const sentiment = await analyzeSentiment(caption);
+          if (sentiment === "ความคิดเห็นเชิงลบ") {
+            results.push({
+              username,
+              caption,
+              postUrl,
+              analyzeSentiment: sentiment,
+            });
+            console.log(`เก็บโพสต์ X เชิงลบได้ ${results.length}/${limit}`);
+          }
+        } catch (err) {
+          console.error("Sentiment analysis error:", err);
         }
-      } catch (err) {
-        console.error("Sentiment analysis error:", err);
       }
+
+      const lastHeight = await page.evaluate(() => document.body.scrollHeight);
+
+      // Scroll แบบมนุษย์มากขึ้น
+      await page.mouse.move(Math.random() * 1920, Math.random() * 1080);
+      await page.mouse.wheel(0, 2000);
+      await page.keyboard.press("PageDown");
+
+      await page.waitForTimeout(7000);
+
+      const newHeight = await page.evaluate(() => document.body.scrollHeight);
+
+      if (newHeight === lastHeight) {
+        noContentCount++;
+      } else {
+        noContentCount = 0;
+      }
+
+      if (noContentCount > 10) {
+        console.log("หมดเนื้อหาให้ scroll ของ X แล้ว ");
+        break;
+      }
+
+      scrollAttempts++;
     }
 
-    const lastHeight = await page.evaluate(() => document.body.scrollHeight);
-
-    // Scroll แบบมนุษย์มากขึ้น
-    await page.mouse.move(Math.random() * 1920, Math.random() * 1080);
-    await page.mouse.wheel(0, 2000);
-    await page.keyboard.press("PageDown");
-
-    await page.waitForTimeout(7000);
-
-    const newHeight = await page.evaluate(() => document.body.scrollHeight);
-
-    if (newHeight === lastHeight) {
-      noContentCount++;
-    } else {
-      noContentCount = 0;
-    }
-
-    if (noContentCount > 10) {
-      console.log("หมดเนื้อหาให้ scroll ของ X แล้ว ");
-      break;
-    }
-
-    scrollAttempts++;
+    return results;
+  } finally {
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
   }
-
-  await context.close();
-  await browser.close();
-
-  return results;
 }
 
 // ฟังก์ชั่นสำหรับจัดการค้นหาหลาย keyword
@@ -247,8 +270,7 @@ async function searchMultipleKeywords(keywords, limit) {
   for (let i = 0; i < keywords.length; i++) {
     const keyword = keywords[i];
     console.log(
-      `\n=== กำลังค้นหา keyword ที่ ${i + 1}/${
-        keywords.length
+      `\n=== กำลังค้นหา keyword ที่ ${i + 1}/${keywords.length
       }: "${keyword}" ===`
     );
 

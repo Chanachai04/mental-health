@@ -1,13 +1,36 @@
-require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
+const dotenv = require("dotenv");
 const axios = require("axios");
 
-const API_URL =
-  process.env.SENTIMENT_API_URL ;
+// โหลด .env.local ถ้ามี (dotenv ปกติจะอ่านแค่ .env)
+const envLocalPath = path.join(__dirname, "..", ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath });
+} else {
+  dotenv.config();
+}
+
+function normalizeApiUrl(raw) {
+  const value = (raw ?? "").toString().trim().replace(/^["']|["']$/g, "");
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  // รองรับกรณีใส่แค่ host:port/path โดยลืม http://
+  if (/^[\w.-]+:\d{2,5}(\/.*)?$/.test(value)) return `http://${value}`;
+  return value;
+}
+
+const API_URL = normalizeApiUrl(process.env.SENTIMENT_API_URL);
 
 async function analyzeSentiment(message) {
   if (!message || message.trim() === "") return "ไม่สามารถระบุได้";
 
   try {
+    if (!API_URL) {
+      throw new Error(
+        'Missing SENTIMENT_API_URL. Please set it in .env or .env.local (e.g. SENTIMENT_API_URL="http://127.0.0.1:5000/sentiment")'
+      );
+    }
     const response = await axios.post(
       API_URL,
       { text: message },

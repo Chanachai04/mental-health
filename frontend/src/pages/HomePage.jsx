@@ -134,13 +134,12 @@ function HomePage() {
 
           {message.text && (
             <div
-              className={`mt-4 p-3 rounded-xl text-center font-medium ${
-                message.type === "error"
+              className={`mt-4 p-3 rounded-xl text-center font-medium ${message.type === "error"
                   ? "bg-red-100 text-red-700"
                   : message.type === "success"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-blue-100 text-blue-700"
-              }`}
+                    ? "bg-green-100 text-green-700"
+                    : "bg-blue-100 text-blue-700"
+                }`}
             >
               {message.text}
             </div>
@@ -223,11 +222,10 @@ function HomePage() {
           <button
             onClick={handleSearchClick}
             className={`w-full py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 
-            ${
-              schedulerStatus.isRunning
+            ${schedulerStatus.isRunning
                 ? "bg-red-500 hover:bg-red-600"
                 : "bg-green-500 hover:bg-green-600"
-            }
+              }
             ${loading ? "opacity-70 cursor-not-allowed" : ""}
           `}
             disabled={loading}
